@@ -10,3 +10,11 @@ firebase-debug.log
 firestore-debug.log
 ui-debug.log
 
+# Large binary files (should be installed via package managers)
+*.exe
+bin/
+ffmpeg.exe
+ffplay.exe
+ffprobe.exe
+yt-dlp.exe
+
