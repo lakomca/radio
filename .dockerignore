@@ -1,0 +1,13 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+.env
+*.md
+.DS_Store
+firebase.json
+.firebaserc
+functions/
+.firebase/
+firebase-debug.log
+
