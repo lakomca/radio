@@ -448,9 +448,30 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok' });
 });
 
-app.listen(PORT, () => {
-    console.log(`Radio server running on http://localhost:${PORT}`);
-    console.log('Make sure ffmpeg and yt-dlp are installed and in your PATH');
+app.listen(PORT, '0.0.0.0', () => {
+    const os = require('os');
+    const networkInterfaces = os.networkInterfaces();
+    let localIP = 'localhost';
+    
+    // Find local IP address
+    for (const interfaceName in networkInterfaces) {
+        const addresses = networkInterfaces[interfaceName];
+        for (const address of addresses) {
+            if (address.family === 'IPv4' && !address.internal) {
+                localIP = address.address;
+                break;
+            }
+        }
+        if (localIP !== 'localhost') break;
+    }
+    
+    console.log(`\n✅ Radio server running!`);
+    console.log(`   Local:    http://localhost:${PORT}`);
+    console.log(`   Network:  http://${localIP}:${PORT}`);
+    console.log(`\n📱 Access from other devices on the same Wi-Fi:`);
+    console.log(`   http://${localIP}:${PORT}`);
+    console.log(`\n⚠️  Make sure Windows Firewall allows Node.js on port ${PORT}`);
+    console.log(`   Make sure ffmpeg and yt-dlp are installed and in your PATH\n`);
 }).on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
         console.error(`\n❌ Port ${PORT} is already in use!`);
