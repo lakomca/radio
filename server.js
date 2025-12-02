@@ -339,8 +339,10 @@ app.get('/stream', (req, res) => {
             '-reconnect', '1',
             '-reconnect_at_eof', '1',
             '-reconnect_streamed', '1',
-            '-reconnect_delay_max', '2',
+            '-reconnect_delay_max', '5',  // Increased delay for better reconnection
+            '-reconnect_on_network_error', '1',
             '-fflags', '+genpts',  // Generate presentation timestamps
+            '-avoid_negative_ts', 'make_zero',  // Prevent timestamp issues
             '-'
         ];
         
@@ -399,9 +401,15 @@ app.get('/stream', (req, res) => {
         // Handle stream end
         ffmpeg.on('close', (code) => {
             console.log(`FFmpeg process exited with code ${code}`);
+            // Code 0 is normal exit, code 1 might be error but could also be end of stream
+            if (code !== 0 && code !== 1) {
+                console.error(`FFmpeg exited with error code: ${code}`);
+            }
             if (!res.headersSent) {
                 res.status(500).end();
             } else {
+                // Only end if headers were sent (stream was started)
+                // This allows the stream to end naturally when video finishes
                 res.end();
             }
         });

@@ -18,6 +18,7 @@ let currentStreamUrl = null;
 let isLoading = false;
 let playlist = []; // Array to store playlist
 let currentIndex = -1; // Current song index in playlist
+let endedHandler = null; // Handler for ended event
 
 // Set initial volume
 audioPlayer.volume = volumeSlider.value / 100;
@@ -246,22 +247,60 @@ function loadStream(youtubeUrl) {
         });
     }, { once: true });
     
-    // Auto-play next song when current ends
-    audioPlayer.addEventListener('ended', () => {
-        console.log('Song ended');
-        if (currentIndex < playlist.length - 1) {
-            currentIndex++;
-            loadStream(playlist[currentIndex].url);
-            statusText.textContent = `Next: ${playlist[currentIndex].title}`;
-        } else {
-            updatePlayPauseButton(false);
-            statusText.textContent = 'Playlist ended';
-        }
-    });
-    
     audioPlayer.addEventListener('canplaythrough', () => {
         console.log('Audio can play through');
     }, { once: true });
+    
+    // Re-setup ended listener after loading new stream
+    setupEndedListener();
+}
+
+// Handle song ending - moved outside loadStream to prevent duplicate listeners
+function setupEndedListener() {
+    // Remove existing listener if any
+    if (endedHandler) {
+        audioPlayer.removeEventListener('ended', endedHandler);
+    }
+    
+    // Create new handler
+    endedHandler = () => {
+        console.log('Song ended event fired');
+        console.log('Audio ended:', audioPlayer.ended);
+        console.log('Audio error:', audioPlayer.error);
+        console.log('Audio paused:', audioPlayer.paused);
+        console.log('Audio currentTime:', audioPlayer.currentTime);
+        console.log('Audio duration:', audioPlayer.duration);
+        
+        // Prevent premature ending - check if we're actually at the end
+        // Sometimes 'ended' fires due to network issues, not actual end of track
+        const isActuallyEnded = audioPlayer.ended && 
+                                !audioPlayer.error && 
+                                audioPlayer.currentTime > 0 &&
+                                (audioPlayer.duration === 0 || 
+                                 Math.abs(audioPlayer.currentTime - audioPlayer.duration) < 2);
+        
+        if (isActuallyEnded) {
+            console.log('Song actually ended, proceeding to next or stopping');
+            if (playlist.length > 0 && currentIndex < playlist.length - 1) {
+                currentIndex++;
+                loadStream(playlist[currentIndex].url);
+                statusText.textContent = `Next: ${playlist[currentIndex].title}`;
+            } else {
+                updatePlayPauseButton(false);
+                statusText.textContent = playlist.length > 0 ? 'Playlist ended' : 'Song ended';
+            }
+        } else {
+            console.log('Song did not actually end, ignoring ended event (likely network issue)');
+            // Try to resume if it was a network hiccup
+            if (audioPlayer.error && audioPlayer.error.code === 2) {
+                console.log('Network error detected, attempting to reload stream');
+                // Don't auto-reload, let user manually retry
+                statusText.textContent = 'Connection lost. Please reload the stream.';
+            }
+        }
+    };
+    
+    audioPlayer.addEventListener('ended', endedHandler);
 }
 
 // Update play/pause button appearance
