@@ -19,10 +19,114 @@ let isLoading = false;
 let playlist = []; // Array to store playlist
 let currentIndex = -1; // Current song index in playlist
 let endedHandler = null; // Handler for ended event
+let isBuffering = false;
+let lastCurrentTime = 0;
+let streamStartTime = null; // Track when stream started
 
 // Set initial volume
 audioPlayer.volume = volumeSlider.value / 100;
 volumeValue.textContent = `${volumeSlider.value}%`;
+
+// ===== GLOBAL EVENT LISTENERS (set up once, not in loadStream) =====
+
+// Track current time to detect restarts
+audioPlayer.addEventListener('timeupdate', () => {
+    const currentTime = audioPlayer.currentTime;
+    
+    // Detect if stream restarted (time jumped backwards significantly)
+    if (lastCurrentTime > 5 && currentTime < lastCurrentTime - 2 && !audioPlayer.seeking) {
+        console.error('🚨 STREAM RESTART DETECTED!');
+        console.error('Time jumped from', lastCurrentTime, 'to', currentTime);
+        console.error('Current src:', audioPlayer.src);
+        console.error('Error:', audioPlayer.error);
+        console.error('Stack trace:', new Error().stack);
+        // Don't do anything - just log for debugging
+    }
+    lastCurrentTime = currentTime;
+});
+
+// Handle progress events (buffering)
+audioPlayer.addEventListener('progress', () => {
+    if (audioPlayer.buffered.length > 0) {
+        const bufferedEnd = audioPlayer.buffered.end(audioPlayer.buffered.length - 1);
+        const currentTime = audioPlayer.currentTime;
+        const bufferedAhead = bufferedEnd - currentTime;
+        
+        if (bufferedAhead < 2 && !audioPlayer.paused) {
+            if (!isBuffering) {
+                isBuffering = true;
+                console.log('📊 Buffering started - buffer ahead:', bufferedAhead.toFixed(2), 'seconds');
+            }
+            if (currentIndex >= 0 && playlist[currentIndex]) {
+                statusText.textContent = `Buffering: ${playlist[currentIndex].title}`;
+            } else {
+                statusText.textContent = 'Buffering...';
+            }
+        } else if (isBuffering && bufferedAhead > 5) {
+            isBuffering = false;
+            console.log('✅ Buffering complete - buffer ahead:', bufferedAhead.toFixed(2), 'seconds');
+            if (currentIndex >= 0 && playlist[currentIndex]) {
+                statusText.textContent = `Playing: ${playlist[currentIndex].title}`;
+            } else {
+                statusText.textContent = 'Playing...';
+            }
+        }
+    }
+});
+
+// Handle stalled events
+audioPlayer.addEventListener('stalled', () => {
+    console.log('⚠️ Stream stalled - waiting for data');
+    if (!audioPlayer.paused) {
+        if (currentIndex >= 0 && playlist[currentIndex]) {
+            statusText.textContent = `Buffering: ${playlist[currentIndex].title}`;
+        } else {
+            statusText.textContent = 'Buffering...';
+        }
+    }
+});
+
+// Handle waiting events
+audioPlayer.addEventListener('waiting', () => {
+    console.log('⏳ Stream waiting for data');
+    if (!audioPlayer.paused) {
+        if (currentIndex >= 0 && playlist[currentIndex]) {
+            statusText.textContent = `Buffering: ${playlist[currentIndex].title}`;
+        } else {
+            statusText.textContent = 'Buffering...';
+        }
+    }
+});
+
+// Handle suspend events
+audioPlayer.addEventListener('suspend', () => {
+    console.log('⏸️ Stream suspended (normal - enough data buffered)');
+});
+
+// Track when source changes
+const originalSrcSetter = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src').set;
+Object.defineProperty(audioPlayer, 'src', {
+    set: function(value) {
+        console.log('🔄 Audio src changed from', this.src, 'to', value);
+        if (this.src && value && this.src !== value) {
+            console.log('⚠️ Source changed while playing - this might cause restart!');
+        }
+        originalSrcSetter.call(this, value);
+    },
+    get: function() {
+        return this.getAttribute('src');
+    }
+});
+
+// Track load() calls
+const originalLoad = audioPlayer.load.bind(audioPlayer);
+audioPlayer.load = function() {
+    console.log('🔄 audioPlayer.load() called');
+    console.trace('Load called from:');
+    return originalLoad();
+};
+
+// ===== END GLOBAL EVENT LISTENERS =====
 
 // Play/Pause functionality
 playPauseBtn.addEventListener('click', () => {
@@ -109,20 +213,21 @@ youtubeUrlInput.addEventListener('keypress', (e) => {
 function loadStream(youtubeUrl) {
     // Prevent multiple simultaneous loads
     if (isLoading) {
-        console.log('Already loading, ignoring duplicate request for:', youtubeUrl);
+        console.log('⚠️ Already loading, ignoring duplicate request for:', youtubeUrl);
         return;
     }
     
-    console.log('Setting isLoading to true');
+    console.log('🎵 ===== LOADING NEW STREAM =====');
+    console.log('URL:', youtubeUrl);
+    console.trace('loadStream called from:');
+    
     isLoading = true;
-    console.log('Loading stream for:', youtubeUrl);
     
     // Find video title if in playlist
     let videoTitle = 'Loading stream...';
     if (currentIndex >= 0 && playlist[currentIndex]) {
         videoTitle = `Loading: ${playlist[currentIndex].title}`;
     } else {
-        // Try to find in playlist by URL
         const foundVideo = playlist.find(v => v.url === youtubeUrl);
         if (foundVideo) {
             videoTitle = `Loading: ${foundVideo.title}`;
@@ -134,32 +239,43 @@ function loadStream(youtubeUrl) {
     // Create stream URL
     const streamUrl = `/stream?url=${encodeURIComponent(youtubeUrl)}`;
     console.log('Stream URL:', streamUrl);
+    
+    // Check if we're reloading the same stream
+    if (currentStreamUrl === streamUrl && !audioPlayer.paused) {
+        console.warn('⚠️ WARNING: Attempting to reload the same stream while playing!');
+        console.warn('This will cause a restart. Current time:', audioPlayer.currentTime);
+    }
+    
     currentStreamUrl = streamUrl;
+    streamStartTime = Date.now();
     
     // Reset audio player completely
     try {
-        audioPlayer.pause();
-        // Store current time if we're reloading the same stream (shouldn't happen, but just in case)
         const wasPlaying = !audioPlayer.paused;
+        const oldTime = audioPlayer.currentTime;
+        console.log('Resetting audio player. Was playing:', wasPlaying, 'Time:', oldTime);
+        
+        audioPlayer.pause();
         audioPlayer.removeAttribute('src');
         audioPlayer.load();
+        
+        // Reset tracking variables
+        lastCurrentTime = 0;
+        isBuffering = false;
     } catch (e) {
         console.warn('Error resetting audio player:', e);
     }
     
     // Small delay to ensure reset is complete
     setTimeout(() => {
-        // Set audio source
+        console.log('Setting new audio source:', streamUrl);
         audioPlayer.src = streamUrl;
-        console.log('Audio player source set, waiting for metadata...');
-        
-        // Force load
         audioPlayer.load();
     }, 100);
     
     // Wait for metadata - use a single persistent listener
     const loadstartHandler = () => {
-        console.log('Audio loadstart event');
+        console.log('📡 Audio loadstart event');
         if (currentIndex >= 0 && playlist[currentIndex]) {
             statusText.textContent = `Connecting: ${playlist[currentIndex].title}`;
         } else {
@@ -172,7 +288,7 @@ function loadStream(youtubeUrl) {
     audioPlayer.addEventListener('loadstart', loadstartHandler, { once: true });
     
     audioPlayer.addEventListener('loadedmetadata', () => {
-        console.log('Audio metadata loaded');
+        console.log('✅ Audio metadata loaded');
         isLoading = false;
         if (currentIndex >= 0 && playlist[currentIndex]) {
             statusText.textContent = `Ready: ${playlist[currentIndex].title}`;
@@ -184,86 +300,17 @@ function loadStream(youtubeUrl) {
     }, { once: true });
     
     audioPlayer.addEventListener('loadeddata', () => {
-        console.log('Audio data loaded');
+        console.log('✅ Audio data loaded');
     }, { once: true });
-    
-    // Track buffering state to prevent restarts
-    let isBuffering = false;
-    let lastCurrentTime = 0;
-    
-    audioPlayer.addEventListener('progress', () => {
-        // Only update status if actually buffering (not just normal progress)
-        if (audioPlayer.buffered.length > 0) {
-            const bufferedEnd = audioPlayer.buffered.end(audioPlayer.buffered.length - 1);
-            const currentTime = audioPlayer.currentTime;
-            const bufferedAhead = bufferedEnd - currentTime;
-            
-            // Only show buffering if we're running low on buffer
-            if (bufferedAhead < 2 && !audioPlayer.paused) {
-                isBuffering = true;
-                if (currentIndex >= 0 && playlist[currentIndex]) {
-                    statusText.textContent = `Buffering: ${playlist[currentIndex].title}`;
-                } else {
-                    statusText.textContent = 'Buffering...';
-                }
-            } else if (isBuffering && bufferedAhead > 5) {
-                isBuffering = false;
-                if (currentIndex >= 0 && playlist[currentIndex]) {
-                    statusText.textContent = `Playing: ${playlist[currentIndex].title}`;
-                } else {
-                    statusText.textContent = 'Playing...';
-                }
-            }
-        }
-    });
-    
-    // Handle stalled events (when stream stops downloading)
-    audioPlayer.addEventListener('stalled', () => {
-        console.log('Stream stalled - waiting for data');
-        if (!audioPlayer.paused) {
-            if (currentIndex >= 0 && playlist[currentIndex]) {
-                statusText.textContent = `Buffering: ${playlist[currentIndex].title}`;
-            } else {
-                statusText.textContent = 'Buffering...';
-            }
-        }
-    });
-    
-    // Handle waiting events (when playback stops due to lack of data)
-    audioPlayer.addEventListener('waiting', () => {
-        console.log('Stream waiting for data');
-        if (!audioPlayer.paused) {
-            if (currentIndex >= 0 && playlist[currentIndex]) {
-                statusText.textContent = `Buffering: ${playlist[currentIndex].title}`;
-            } else {
-                statusText.textContent = 'Buffering...';
-            }
-        }
-    });
-    
-    // Handle suspend events (when loading is paused)
-    audioPlayer.addEventListener('suspend', () => {
-        console.log('Stream suspended');
-        // Don't do anything - this is normal when enough data is buffered
-    });
-    
-    // Track current time to detect restarts
-    audioPlayer.addEventListener('timeupdate', () => {
-        const currentTime = audioPlayer.currentTime;
-        // If time jumps backwards significantly, it might have restarted
-        if (lastCurrentTime > 5 && currentTime < lastCurrentTime - 2 && !audioPlayer.seeking) {
-            console.warn('Detected possible restart: time jumped from', lastCurrentTime, 'to', currentTime);
-            // Don't restart - just log it
-        }
-        lastCurrentTime = currentTime;
-    });
     
     // Handle errors
     audioPlayer.addEventListener('error', (e) => {
         isLoading = false;
-        console.error('Audio error:', e);
-        console.error('Audio error code:', audioPlayer.error?.code);
-        console.error('Audio error message:', audioPlayer.error?.message);
+        console.error('❌ Audio error:', e);
+        console.error('Error code:', audioPlayer.error?.code);
+        console.error('Error message:', audioPlayer.error?.message);
+        console.trace('Error occurred at:');
+        
         let errorMsg = 'Error loading stream. ';
         if (audioPlayer.error) {
             switch(audioPlayer.error.code) {
@@ -279,19 +326,19 @@ function loadStream(youtubeUrl) {
         updatePlayPauseButton(false);
     }, { once: true });
     
-    // Timeout fallback - if no response after 30 seconds, reset loading flag
+    // Timeout fallback
     setTimeout(() => {
         if (isLoading) {
-            console.warn('Load timeout - resetting loading flag');
+            console.warn('⏱️ Load timeout - resetting loading flag');
             isLoading = false;
         }
     }, 30000);
     
     // Auto-play when loaded
     audioPlayer.addEventListener('canplay', () => {
-        console.log('Audio can play');
+        console.log('▶️ Audio can play');
         audioPlayer.play().then(() => {
-            console.log('Audio play started');
+            console.log('✅ Audio play started');
             updatePlayPauseButton(true);
             if (currentIndex >= 0 && playlist[currentIndex]) {
                 statusText.textContent = `Playing: ${playlist[currentIndex].title}`;
@@ -299,13 +346,13 @@ function loadStream(youtubeUrl) {
                 statusText.textContent = 'Playing...';
             }
         }).catch(err => {
-            console.error('Play error:', err);
+            console.error('❌ Play error:', err);
             statusText.textContent = 'Click play to start';
         });
     }, { once: true });
     
     audioPlayer.addEventListener('canplaythrough', () => {
-        console.log('Audio can play through');
+        console.log('✅ Audio can play through');
     }, { once: true });
     
     // Re-setup ended listener after loading new stream
@@ -321,15 +368,13 @@ function setupEndedListener() {
     
     // Create new handler
     endedHandler = () => {
-        console.log('Song ended event fired');
+        console.log('🏁 Song ended event fired');
         console.log('Audio ended:', audioPlayer.ended);
         console.log('Audio error:', audioPlayer.error);
         console.log('Audio paused:', audioPlayer.paused);
         console.log('Audio currentTime:', audioPlayer.currentTime);
         console.log('Audio duration:', audioPlayer.duration);
         
-        // Prevent premature ending - check if we're actually at the end
-        // Sometimes 'ended' fires due to network issues, not actual end of track
         const isActuallyEnded = audioPlayer.ended && 
                                 !audioPlayer.error && 
                                 audioPlayer.currentTime > 0 &&
@@ -337,7 +382,7 @@ function setupEndedListener() {
                                  Math.abs(audioPlayer.currentTime - audioPlayer.duration) < 2);
         
         if (isActuallyEnded) {
-            console.log('Song actually ended, proceeding to next or stopping');
+            console.log('✅ Song actually ended, proceeding to next or stopping');
             if (playlist.length > 0 && currentIndex < playlist.length - 1) {
                 currentIndex++;
                 loadStream(playlist[currentIndex].url);
@@ -347,11 +392,9 @@ function setupEndedListener() {
                 statusText.textContent = playlist.length > 0 ? 'Playlist ended' : 'Song ended';
             }
         } else {
-            console.log('Song did not actually end, ignoring ended event (likely network issue)');
-            // Try to resume if it was a network hiccup
+            console.log('⚠️ Song did not actually end, ignoring ended event (likely network issue)');
             if (audioPlayer.error && audioPlayer.error.code === 2) {
-                console.log('Network error detected, attempting to reload stream');
-                // Don't auto-reload, let user manually retry
+                console.log('Network error detected');
                 statusText.textContent = 'Connection lost. Please reload the stream.';
             }
         }
@@ -453,25 +496,17 @@ function displaySearchResults(videos) {
             
             console.log('Clicked video:', video.title, video.url);
             
-            // Set current index
             currentIndex = index;
-            
-            // Clear results immediately to prevent multiple clicks
             searchResults.innerHTML = '';
-            
-            // Set input value
             youtubeUrlInput.value = video.url;
-            
-            // Load stream (has isLoading check inside)
             loadStream(video.url);
             
             return false;
-        }, { once: true }); // Only fire once per item
+        }, { once: true });
         
         searchResults.appendChild(item);
     });
     
-    // Update button states
     updateNavigationButtons();
 }
 
@@ -515,3 +550,5 @@ audioPlayer.addEventListener('pause', () => {
     }
 });
 
+// Set up ended listener initially
+setupEndedListener();
