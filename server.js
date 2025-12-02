@@ -384,6 +384,7 @@ app.get('/stream', (req, res) => {
         });
 
         // Pipe ffmpeg output to response
+        let bytesWritten = 0;
         ffmpeg.stdout.on('data', (chunk) => {
             if (firstChunk) {
                 console.log(`FFmpeg started streaming, first chunk size: ${chunk.length} bytes`);
@@ -392,8 +393,11 @@ app.get('/stream', (req, res) => {
             if (!hasError && !res.destroyed) {
                 try {
                     res.write(chunk);
+                    bytesWritten += chunk.length;
                 } catch (err) {
                     console.error('Error writing chunk:', err);
+                    // If write fails, it might be because client disconnected
+                    // Don't kill ffmpeg, let it continue in case client reconnects
                 }
             }
         });
@@ -415,9 +419,28 @@ app.get('/stream', (req, res) => {
         });
 
         // Handle client disconnect
+        let clientDisconnected = false;
         req.on('close', () => {
-            ffmpeg.kill();
-            console.log('Client disconnected');
+            clientDisconnected = true;
+            console.log('Client disconnected - stopping ffmpeg');
+            // Only kill ffmpeg if client actually disconnected
+            // This prevents killing the stream during normal buffering
+            try {
+                ffmpeg.kill();
+            } catch (err) {
+                console.error('Error killing ffmpeg:', err);
+            }
+        });
+        
+        // Also handle abort
+        req.on('aborted', () => {
+            clientDisconnected = true;
+            console.log('Client aborted connection');
+            try {
+                ffmpeg.kill();
+            } catch (err) {
+                console.error('Error killing ffmpeg on abort:', err);
+            }
         });
 
         // Store stream reference
