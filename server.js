@@ -9,6 +9,11 @@ const PORT = process.env.PORT || 3000;
 // Serve static files
 app.use(express.static('public'));
 
+// Explicit root route to serve index.html
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // Helper function to execute yt-dlp and get URL
 function getAudioUrl(youtubeUrl) {
     return new Promise((resolve, reject) => {
@@ -448,6 +453,34 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok' });
 });
 
+// Catch-all route for SPA - serve index.html for any non-API routes
+app.get('*', (req, res) => {
+    // Don't serve index.html for API routes
+    if (req.path.startsWith('/stream') || req.path.startsWith('/search') || req.path.startsWith('/health')) {
+        return res.status(404).json({ error: 'Not found' });
+    }
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Verify public directory exists before starting
+const publicPath = path.join(__dirname, 'public');
+const indexPath = path.join(publicPath, 'index.html');
+
+if (!fs.existsSync(publicPath)) {
+    console.error(`❌ ERROR: Public directory not found at ${publicPath}`);
+    console.error(`Current working directory: ${process.cwd()}`);
+    console.error(`__dirname: ${__dirname}`);
+    process.exit(1);
+}
+
+if (!fs.existsSync(indexPath)) {
+    console.error(`❌ ERROR: index.html not found at ${indexPath}`);
+    process.exit(1);
+}
+
+console.log(`✅ Public directory found at: ${publicPath}`);
+console.log(`✅ index.html found at: ${indexPath}`);
+
 app.listen(PORT, '0.0.0.0', () => {
     const os = require('os');
     const networkInterfaces = os.networkInterfaces();
@@ -466,6 +499,7 @@ app.listen(PORT, '0.0.0.0', () => {
     }
     
     console.log(`\n✅ Radio server running!`);
+    console.log(`   Port:     ${PORT}`);
     console.log(`   Local:    http://localhost:${PORT}`);
     console.log(`   Network:  http://${localIP}:${PORT}`);
     console.log(`\n📱 Access from other devices on the same Wi-Fi:`);
