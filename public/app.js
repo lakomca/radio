@@ -196,11 +196,16 @@ nextBtn.addEventListener('click', async () => {
         playlist = [nextVideo]; // Store as single item for display
         loadStream(nextVideo.url);
         statusText.textContent = `Next: ${nextVideo.title}`;
+        
+        // Ensure next button stays enabled after loading
+        updateNavigationButtons();
     } catch (error) {
         console.error('Error getting next video:', error);
         statusText.textContent = 'Failed to load next video';
     } finally {
+        // Always re-enable next button
         nextBtn.disabled = false;
+        updateNavigationButtons();
     }
 });
 
