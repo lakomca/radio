@@ -24,7 +24,7 @@ let lastCurrentTime = 0;
 let streamStartTime = null; // Track when stream started
 let allSearchVideos = []; // Store all search results
 let displayedVideosCount = 0; // Track how many videos are currently displayed
-const VIDEOS_PER_BATCH = 20; // Number of videos to load per batch
+const VIDEOS_PER_BATCH = 20; // Number of videos to load per batch (always 20)
 
 // Set initial volume
 audioPlayer.volume = volumeSlider.value / 100;
@@ -633,16 +633,17 @@ function setupInfiniteScroll() {
     // Create new scroll handler
     scrollHandler = () => {
         const element = searchResults;
-        // Check if user scrolled near the bottom (within 300px)
+        // Check if user scrolled near the bottom (within 200px)
         const scrollBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
         
-        if (scrollBottom < 300 && !isLoadingMore && displayedVideosCount < allSearchVideos.length) {
+        if (scrollBottom < 200 && !isLoadingMore && displayedVideosCount < allSearchVideos.length) {
+            console.log(`Scroll detected: ${scrollBottom}px from bottom, loading more videos...`);
             isLoadingMore = true;
             loadMoreVideos();
-            // Reset loading flag after a short delay
+            // Reset loading flag after videos are loaded
             setTimeout(() => {
                 isLoadingMore = false;
-            }, 500);
+            }, 300);
         }
     };
     
