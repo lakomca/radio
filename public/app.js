@@ -507,13 +507,16 @@ async function searchYouTube(query) {
         allSearchVideos = data.videos;
         displayedVideosCount = 0;
         
+        console.log(`Received ${data.videos.length} videos from server`);
+        console.log(`First 5 videos:`, data.videos.slice(0, 5).map(v => v.title));
+        
         // Display first batch
         loadMoreVideos();
         
         // Setup infinite scroll
         setupInfiniteScroll();
         
-        statusText.textContent = `Found ${data.videos.length} results`;
+        statusText.textContent = `Found ${data.videos.length} results - Scroll down for more`;
     } catch (error) {
         console.error('Search error:', error);
         searchResults.innerHTML = '<div class="error">Failed to search. Please try again.</div>';
@@ -651,9 +654,19 @@ function updateNavigationButtons() {
         prevBtn.disabled = false;
     }
     
-    // Next button: always enable (it gets related videos dynamically, not from playlist)
-    // The next button doesn't depend on playlist length anymore
-    nextBtn.disabled = false;
+    // Next button: always enable if there's a current video
+    // The next button gets related videos dynamically, not from playlist
+    // So it doesn't depend on playlist length or currentIndex
+    const hasCurrentVideo = youtubeUrlInput.value.trim().length > 0;
+    nextBtn.disabled = !hasCurrentVideo;
+    
+    console.log('Navigation buttons updated:', {
+        hasCurrentVideo,
+        nextBtnDisabled: nextBtn.disabled,
+        playlistLength: playlist.length,
+        currentIndex,
+        prevBtnDisabled: prevBtn.disabled
+    });
 }
 
 // Format duration (seconds to MM:SS)
