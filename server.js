@@ -313,8 +313,12 @@ app.get('/stream', (req, res) => {
     // Get audio URL from YouTube using yt-dlp first
     getAudioUrl(youtubeUrl).then(audioUrl => {
         if (!audioUrl || !audioUrl.trim()) {
-            console.error('Failed to get audio URL');
-            return res.status(500).json({ error: 'Failed to get audio URL' });
+            console.error('Failed to get audio URL - empty response');
+            return res.status(500).json({ 
+                error: 'Failed to get audio URL', 
+                details: 'yt-dlp returned empty response. Please check Railway logs for more details.',
+                hint: 'Make sure yt-dlp is installed and accessible in PATH'
+            });
         }
 
         const url = audioUrl;
@@ -408,9 +412,21 @@ app.get('/stream', (req, res) => {
             // Code 0 is normal exit, code 1 might be error but could also be end of stream
             if (code !== 0 && code !== 1) {
                 console.error(`FFmpeg exited with error code: ${code}`);
+                if (!res.headersSent && !hasError) {
+                    res.status(500).json({ 
+                        error: 'FFmpeg process failed', 
+                        details: `FFmpeg exited with code ${code}`,
+                        hint: 'Check Railway logs for FFmpeg error details'
+                    });
+                    return;
+                }
             }
             if (!res.headersSent) {
-                res.status(500).end();
+                res.status(500).json({ 
+                    error: 'Stream failed to start', 
+                    details: 'FFmpeg process ended before streaming started',
+                    hint: 'Check Railway logs for FFmpeg error details'
+                });
             } else {
                 // Only end if headers were sent (stream was started)
                 // This allows the stream to end naturally when video finishes
@@ -449,8 +465,15 @@ app.get('/stream', (req, res) => {
         
     }).catch(error => {
         console.error('Error getting audio URL:', error);
+        console.error('Error stack:', error.stack);
         if (!res.headersSent) {
-            res.status(500).json({ error: 'Failed to process YouTube URL', details: error.message });
+            res.status(500).json({ 
+                error: 'Failed to process YouTube URL', 
+                details: error.message,
+                hint: error.message.includes('not found') ? 
+                    'yt-dlp or youtube-dl is not installed. Check Railway deployment logs.' : 
+                    'Check Railway logs for more details about the error.'
+            });
         }
     });
 });
