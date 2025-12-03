@@ -699,6 +699,61 @@ function formatDuration(seconds) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
+// Format time for progress display (seconds to MM:SS or HH:MM:SS)
+function formatTime(seconds) {
+    if (!seconds || isNaN(seconds) || seconds < 0) return '0:00';
+    const sec = Math.floor(seconds);
+    const hours = Math.floor(sec / 3600);
+    const mins = Math.floor((sec % 3600) / 60);
+    const secs = sec % 60;
+    
+    if (hours > 0) {
+        return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+// Progress bar seeking
+let isSeeking = false;
+if (progressBar) {
+    progressBar.addEventListener('input', () => {
+        isSeeking = true;
+    });
+
+    progressBar.addEventListener('change', () => {
+        if (audioPlayer.duration && !isNaN(audioPlayer.duration)) {
+            const seekTime = (progressBar.value / 100) * audioPlayer.duration;
+            audioPlayer.currentTime = seekTime;
+            if (currentTimeDisplay) {
+                currentTimeDisplay.textContent = formatTime(seekTime);
+            }
+        }
+        isSeeking = false;
+    });
+}
+
+// Update progress bar when duration is loaded
+audioPlayer.addEventListener('loadedmetadata', () => {
+    if (audioPlayer.duration && !isNaN(audioPlayer.duration) && totalTimeDisplay) {
+        totalTimeDisplay.textContent = formatTime(audioPlayer.duration);
+    }
+});
+
+// Reset progress when stream ends
+audioPlayer.addEventListener('ended', () => {
+    if (progressBar) progressBar.value = 0;
+    if (currentTimeDisplay) currentTimeDisplay.textContent = '0:00';
+});
+
+// Reset progress when stopped
+if (stopBtn) {
+    const originalStopHandler = stopBtn.onclick;
+    stopBtn.addEventListener('click', () => {
+        if (progressBar) progressBar.value = 0;
+        if (currentTimeDisplay) currentTimeDisplay.textContent = '0:00';
+    });
+}
+
 // Handle audio player events
 audioPlayer.addEventListener('play', () => {
     updatePlayPauseButton(true);
