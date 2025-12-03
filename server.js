@@ -98,7 +98,7 @@ function searchYouTube(query) {
         const commands = [
             { 
                 cmd: 'yt-dlp', 
-                args: [`ytsearch10:${query}`, '--flat-playlist', '--print', '%(id)s|%(title)s|%(duration)s'],
+                args: [`ytsearch:${query}`, '--flat-playlist', '--print', '%(id)s|%(title)s|%(duration)s'],
                 parser: (output) => {
                     return output.trim().split('\n')
                         .filter(line => line.trim())
@@ -117,7 +117,7 @@ function searchYouTube(query) {
             },
             { 
                 cmd: 'yt-dlp.exe', 
-                args: [`ytsearch10:${query}`, '--flat-playlist', '--print', '%(id)s|%(title)s|%(duration)s'],
+                args: [`ytsearch:${query}`, '--flat-playlist', '--print', '%(id)s|%(title)s|%(duration)s'],
                 parser: (output) => {
                     return output.trim().split('\n')
                         .filter(line => line.trim())
@@ -136,7 +136,7 @@ function searchYouTube(query) {
             },
             { 
                 cmd: 'youtube-dl', 
-                args: [`ytsearch10:${query}`, '--flat-playlist', '--get-id', '--get-title', '--get-duration'],
+                args: [`ytsearch:${query}`, '--flat-playlist', '--get-id', '--get-title', '--get-duration'],
                 parser: (output) => {
                     const lines = output.trim().split('\n');
                     const videos = [];
@@ -155,7 +155,7 @@ function searchYouTube(query) {
             },
             { 
                 cmd: 'youtube-dl.exe', 
-                args: [`ytsearch10:${query}`, '--flat-playlist', '--get-id', '--get-title', '--get-duration'],
+                args: [`ytsearch:${query}`, '--flat-playlist', '--get-id', '--get-title', '--get-duration'],
                 parser: (output) => {
                     const lines = output.trim().split('\n');
                     const videos = [];
@@ -455,6 +455,141 @@ app.get('/stream', (req, res) => {
     });
 });
 
+// Helper function to get related/recommended videos from a YouTube URL
+function getRelatedVideos(youtubeUrl) {
+    return new Promise((resolve, reject) => {
+        const commands = [
+            { 
+                cmd: 'yt-dlp', 
+                args: [youtubeUrl, '--flat-playlist', '--playlist-end', '20', '--print', '%(id)s|%(title)s|%(duration)s'],
+                parser: (output) => {
+                    const lines = output.trim().split('\n').filter(line => line.trim());
+                    // Skip the first video (it's the current one) and get the rest
+                    return lines.slice(1).map(line => {
+                        const [id, ...rest] = line.split('|');
+                        const title = rest.slice(0, -1).join('|');
+                        const duration = rest[rest.length - 1];
+                        return {
+                            id,
+                            title: title || 'Unknown',
+                            duration: duration || 'N/A',
+                            url: `https://www.youtube.com/watch?v=${id}`
+                        };
+                    });
+                }
+            },
+            { 
+                cmd: 'yt-dlp.exe', 
+                args: [youtubeUrl, '--flat-playlist', '--playlist-end', '20', '--print', '%(id)s|%(title)s|%(duration)s'],
+                parser: (output) => {
+                    const lines = output.trim().split('\n').filter(line => line.trim());
+                    return lines.slice(1).map(line => {
+                        const [id, ...rest] = line.split('|');
+                        const title = rest.slice(0, -1).join('|');
+                        const duration = rest[rest.length - 1];
+                        return {
+                            id,
+                            title: title || 'Unknown',
+                            duration: duration || 'N/A',
+                            url: `https://www.youtube.com/watch?v=${id}`
+                        };
+                    });
+                }
+            }
+        ];
+
+        let attemptIndex = 0;
+        let hasResolved = false;
+
+        function tryCommand() {
+            if (hasResolved) return;
+            
+            if (attemptIndex >= commands.length) {
+                hasResolved = true;
+                reject(new Error('yt-dlp not found or failed to get related videos'));
+                return;
+            }
+
+            const { cmd, args, parser } = commands[attemptIndex];
+            console.log(`Getting related videos: Attempting to use ${cmd} for ${youtubeUrl}`);
+            
+            const isWindows = process.platform === 'win32';
+            let childProcess;
+            
+            if (isWindows) {
+                const psCommand = `& "${cmd}" ${args.map(arg => `"${arg}"`).join(' ')}`;
+                childProcess = spawn('powershell.exe', [
+                    '-NoProfile',
+                    '-Command',
+                    psCommand
+                ], {
+                    stdio: ['ignore', 'pipe', 'pipe']
+                });
+            } else {
+                childProcess = spawn(cmd, args, { 
+                    shell: false,
+                    stdio: ['ignore', 'pipe', 'pipe']
+                });
+            }
+            
+            let output = '';
+            let allStderr = '';
+            const timeout = setTimeout(() => {
+                if (!hasResolved) {
+                    childProcess.kill();
+                    console.log(`${cmd} timed out, trying next...`);
+                    attemptIndex++;
+                    tryCommand();
+                }
+            }, 30000);
+
+            childProcess.stdout.on('data', (data) => {
+                output += data.toString();
+            });
+
+            childProcess.stderr.on('data', (data) => {
+                allStderr += data.toString();
+            });
+
+            childProcess.on('close', (code) => {
+                clearTimeout(timeout);
+                
+                if (hasResolved) return;
+
+                if (output.trim()) {
+                    try {
+                        const videos = parser(output);
+                        if (videos.length > 0) {
+                            hasResolved = true;
+                            console.log(`Found ${videos.length} related videos using ${cmd}`);
+                            resolve(videos);
+                            return;
+                        }
+                    } catch (parseError) {
+                        console.error(`Parse error with ${cmd}: ${parseError.message}`);
+                    }
+                }
+
+                if (code !== 0 || !output.trim()) {
+                    console.log(`${cmd} failed with code ${code}`);
+                }
+                attemptIndex++;
+                tryCommand();
+            });
+
+            childProcess.on('error', (error) => {
+                clearTimeout(timeout);
+                if (hasResolved) return;
+                console.error(`${cmd} spawn error: ${error.message}`);
+                attemptIndex++;
+                tryCommand();
+            });
+        }
+
+        tryCommand();
+    });
+}
+
 // Endpoint to search YouTube (optional - for finding music)
 app.get('/search', async (req, res) => {
     const query = req.query.q;
@@ -471,6 +606,25 @@ app.get('/search', async (req, res) => {
     } catch (error) {
         console.error('Search error:', error);
         res.status(500).json({ error: 'Search failed', details: error.message });
+    }
+});
+
+// Endpoint to get related/recommended videos (for autoplay next)
+app.get('/related', async (req, res) => {
+    const youtubeUrl = req.query.url;
+    
+    if (!youtubeUrl) {
+        return res.status(400).json({ error: 'YouTube URL is required' });
+    }
+
+    try {
+        console.log(`Related videos request for: ${youtubeUrl}`);
+        const videos = await getRelatedVideos(youtubeUrl);
+        console.log(`Found ${videos.length} related videos`);
+        res.json({ videos });
+    } catch (error) {
+        console.error('Related videos error:', error);
+        res.status(500).json({ error: 'Failed to get related videos', details: error.message });
     }
 });
 

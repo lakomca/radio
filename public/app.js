@@ -161,19 +161,43 @@ prevBtn.addEventListener('click', () => {
     }
 });
 
-// Next button functionality
-nextBtn.addEventListener('click', () => {
-    if (playlist.length === 0) {
-        statusText.textContent = 'No playlist available';
+// Next button functionality - get next recommended video like YouTube
+nextBtn.addEventListener('click', async () => {
+    // Get current YouTube URL
+    const currentUrl = youtubeUrlInput.value.trim();
+    
+    if (!currentUrl) {
+        statusText.textContent = 'No video playing';
         return;
     }
     
-    if (currentIndex < playlist.length - 1) {
-        currentIndex++;
-        loadStream(playlist[currentIndex].url);
-        statusText.textContent = `Playing: ${playlist[currentIndex].title}`;
-    } else {
-        statusText.textContent = 'Already at last song';
+    // Disable button while loading
+    nextBtn.disabled = true;
+    statusText.textContent = 'Loading next recommended video...';
+    
+    try {
+        // Fetch related videos
+        const response = await fetch(`/related?url=${encodeURIComponent(currentUrl)}`);
+        const data = await response.json();
+        
+        if (data.error || !data.videos || data.videos.length === 0) {
+            statusText.textContent = 'No related videos found';
+            nextBtn.disabled = false;
+            return;
+        }
+        
+        // Play the first recommended video
+        const nextVideo = data.videos[0];
+        youtubeUrlInput.value = nextVideo.url;
+        currentIndex = -1; // Reset index since we're not using playlist
+        playlist = [nextVideo]; // Store as single item for display
+        loadStream(nextVideo.url);
+        statusText.textContent = `Next: ${nextVideo.title}`;
+    } catch (error) {
+        console.error('Error getting next video:', error);
+        statusText.textContent = 'Failed to load next video';
+    } finally {
+        nextBtn.disabled = false;
     }
 });
 
@@ -382,14 +406,34 @@ function setupEndedListener() {
                                  Math.abs(audioPlayer.currentTime - audioPlayer.duration) < 2);
         
         if (isActuallyEnded) {
-            console.log('✅ Song actually ended, proceeding to next or stopping');
-            if (playlist.length > 0 && currentIndex < playlist.length - 1) {
-                currentIndex++;
-                loadStream(playlist[currentIndex].url);
-                statusText.textContent = `Next: ${playlist[currentIndex].title}`;
+            console.log('✅ Song actually ended, getting next recommended video');
+            // Auto-play next recommended video (like YouTube autoplay)
+            const currentUrl = youtubeUrlInput.value.trim();
+            if (currentUrl) {
+                statusText.textContent = 'Loading next recommended video...';
+                fetch(`/related?url=${encodeURIComponent(currentUrl)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.videos && data.videos.length > 0) {
+                            const nextVideo = data.videos[0];
+                            youtubeUrlInput.value = nextVideo.url;
+                            currentIndex = -1;
+                            playlist = [nextVideo];
+                            loadStream(nextVideo.url);
+                            statusText.textContent = `Next: ${nextVideo.title}`;
+                        } else {
+                            updatePlayPauseButton(false);
+                            statusText.textContent = 'No more videos';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error getting next video:', error);
+                        updatePlayPauseButton(false);
+                        statusText.textContent = 'Song ended';
+                    });
             } else {
                 updatePlayPauseButton(false);
-                statusText.textContent = playlist.length > 0 ? 'Playlist ended' : 'Song ended';
+                statusText.textContent = 'Song ended';
             }
         } else {
             console.log('⚠️ Song did not actually end, ignoring ended event (likely network issue)');
