@@ -22,6 +22,9 @@ let endedHandler = null; // Handler for ended event
 let isBuffering = false;
 let lastCurrentTime = 0;
 let streamStartTime = null; // Track when stream started
+let allSearchVideos = []; // Store all search results
+let displayedVideosCount = 0; // Track how many videos are currently displayed
+const VIDEOS_PER_BATCH = 20; // Number of videos to load per batch
 
 // Set initial volume
 audioPlayer.volume = volumeSlider.value / 100;
@@ -480,6 +483,10 @@ async function searchYouTube(query) {
     searchResults.innerHTML = '<div class="loading">Searching...</div>';
     statusText.textContent = 'Searching...';
     
+    // Reset infinite scroll state
+    allSearchVideos = [];
+    displayedVideosCount = 0;
+    
     try {
         const response = await fetch(`/search?q=${encodeURIComponent(query)}`);
         const data = await response.json();
@@ -496,7 +503,16 @@ async function searchYouTube(query) {
             return;
         }
         
-        displaySearchResults(data.videos);
+        // Store all videos and display first batch
+        allSearchVideos = data.videos;
+        displayedVideosCount = 0;
+        
+        // Display first batch
+        loadMoreVideos();
+        
+        // Setup infinite scroll
+        setupInfiniteScroll();
+        
         statusText.textContent = `Found ${data.videos.length} results`;
     } catch (error) {
         console.error('Search error:', error);
@@ -505,18 +521,17 @@ async function searchYouTube(query) {
     }
 }
 
-// Display search results
-function displaySearchResults(videos) {
-    searchResults.innerHTML = '';
+// Load more videos (for infinite scroll)
+function loadMoreVideos() {
+    if (displayedVideosCount >= allSearchVideos.length) {
+        return; // All videos already displayed
+    }
     
-    // Update playlist with search results
-    playlist = videos.map(v => ({
-        title: v.title,
-        url: v.url,
-        duration: v.duration
-    }));
+    const endIndex = Math.min(displayedVideosCount + VIDEOS_PER_BATCH, allSearchVideos.length);
+    const videosToDisplay = allSearchVideos.slice(displayedVideosCount, endIndex);
     
-    videos.forEach((video, index) => {
+    videosToDisplay.forEach((video, relativeIndex) => {
+        const absoluteIndex = displayedVideosCount + relativeIndex;
         const item = document.createElement('div');
         item.className = 'result-item';
         
@@ -540,18 +555,91 @@ function displaySearchResults(videos) {
             
             console.log('Clicked video:', video.title, video.url);
             
-            currentIndex = index;
+            // Find the index in the full playlist
+            currentIndex = allSearchVideos.findIndex(v => v.url === video.url);
+            if (currentIndex === -1) currentIndex = absoluteIndex;
+            
             searchResults.innerHTML = '';
             youtubeUrlInput.value = video.url;
+            
+            // Update playlist with all search results
+            playlist = allSearchVideos.map(v => ({
+                title: v.title,
+                url: v.url,
+                duration: v.duration
+            }));
+            
             loadStream(video.url);
             
             return false;
-        }, { once: true });
+        });
         
         searchResults.appendChild(item);
     });
     
+    displayedVideosCount = endIndex;
+    
+    // Update playlist with all search results (for navigation)
+    playlist = allSearchVideos.map(v => ({
+        title: v.title,
+        url: v.url,
+        duration: v.duration
+    }));
+    
     updateNavigationButtons();
+    
+    // Show loading indicator if there are more videos
+    if (displayedVideosCount < allSearchVideos.length) {
+        // Remove existing loading indicator if any
+        const existingLoader = searchResults.querySelector('.loading-more');
+        if (existingLoader) {
+            existingLoader.remove();
+        }
+        
+        const loader = document.createElement('div');
+        loader.className = 'loading-more';
+        loader.textContent = `Showing ${displayedVideosCount} of ${allSearchVideos.length} videos...`;
+        loader.style.textAlign = 'center';
+        loader.style.padding = '10px';
+        loader.style.color = '#666';
+        searchResults.appendChild(loader);
+    } else {
+        // Remove loading indicator if all videos are shown
+        const existingLoader = searchResults.querySelector('.loading-more');
+        if (existingLoader) {
+            existingLoader.remove();
+        }
+    }
+}
+
+// Setup infinite scroll
+let isLoadingMore = false;
+let scrollHandler = null;
+
+function setupInfiniteScroll() {
+    // Remove existing scroll listener if any
+    if (scrollHandler) {
+        searchResults.removeEventListener('scroll', scrollHandler);
+    }
+    
+    // Create new scroll handler
+    scrollHandler = () => {
+        const element = searchResults;
+        // Check if user scrolled near the bottom (within 300px)
+        const scrollBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+        
+        if (scrollBottom < 300 && !isLoadingMore && displayedVideosCount < allSearchVideos.length) {
+            isLoadingMore = true;
+            loadMoreVideos();
+            // Reset loading flag after a short delay
+            setTimeout(() => {
+                isLoadingMore = false;
+            }, 500);
+        }
+    };
+    
+    // Add scroll listener
+    searchResults.addEventListener('scroll', scrollHandler);
 }
 
 // Update navigation button states
