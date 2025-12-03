@@ -98,7 +98,7 @@ function searchYouTube(query) {
         const commands = [
             { 
                 cmd: 'yt-dlp', 
-                args: [`ytsearch:${query}`, '--flat-playlist', '--print', '%(id)s|%(title)s|%(duration)s'],
+                args: [`ytsearch999:${query}`, '--flat-playlist', '--print', '%(id)s|%(title)s|%(duration)s'],
                 parser: (output) => {
                     return output.trim().split('\n')
                         .filter(line => line.trim())
@@ -117,7 +117,7 @@ function searchYouTube(query) {
             },
             { 
                 cmd: 'yt-dlp.exe', 
-                args: [`ytsearch:${query}`, '--flat-playlist', '--print', '%(id)s|%(title)s|%(duration)s'],
+                args: [`ytsearch999:${query}`, '--flat-playlist', '--print', '%(id)s|%(title)s|%(duration)s'],
                 parser: (output) => {
                     return output.trim().split('\n')
                         .filter(line => line.trim())
@@ -136,7 +136,7 @@ function searchYouTube(query) {
             },
             { 
                 cmd: 'youtube-dl', 
-                args: [`ytsearch:${query}`, '--flat-playlist', '--get-id', '--get-title', '--get-duration'],
+                args: [`ytsearch999:${query}`, '--flat-playlist', '--get-id', '--get-title', '--get-duration'],
                 parser: (output) => {
                     const lines = output.trim().split('\n');
                     const videos = [];
@@ -155,7 +155,7 @@ function searchYouTube(query) {
             },
             { 
                 cmd: 'youtube-dl.exe', 
-                args: [`ytsearch:${query}`, '--flat-playlist', '--get-id', '--get-title', '--get-duration'],
+                args: [`ytsearch999:${query}`, '--flat-playlist', '--get-id', '--get-title', '--get-duration'],
                 parser: (output) => {
                     const lines = output.trim().split('\n');
                     const videos = [];
@@ -188,6 +188,7 @@ function searchYouTube(query) {
 
             const { cmd, args, parser } = commands[attemptIndex];
             console.log(`Search: Attempting to use ${cmd} with query: ${query}`);
+            console.log(`Search: Full command: ${cmd} ${args.join(' ')}`);
             
             // On Windows, use PowerShell to avoid CMD % interpretation issues
             // PowerShell handles % correctly without escaping
@@ -252,16 +253,23 @@ function searchYouTube(query) {
                 // Check if we have output regardless of stderr
                 if (output.trim()) {
                     try {
+                        console.log(`Search: Raw output length: ${output.length} characters`);
+                        console.log(`Search: First 500 chars of output: ${output.substring(0, 500)}`);
                         const videos = parser(output);
+                        console.log(`Search: Parsed ${videos.length} videos from output`);
                         if (videos.length > 0) {
                             hasResolved = true;
                             console.log(`Search: Found ${videos.length} videos using ${cmd}`);
+                            if (videos.length === 1) {
+                                console.warn(`Search: WARNING - Only 1 video found! This might indicate an issue.`);
+                                console.warn(`Search: Output was: ${output.substring(0, 1000)}`);
+                            }
                             resolve(videos);
                             return;
                         }
                     } catch (parseError) {
                         console.error(`Parse error with ${cmd}: ${parseError.message}`);
-                        console.error(`Output was: ${output.substring(0, 200)}`);
+                        console.error(`Output was: ${output.substring(0, 500)}`);
                     }
                 }
 

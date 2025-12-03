@@ -85,7 +85,7 @@ function searchYouTube(query) {
         const commands = [
             { 
                 cmd: 'yt-dlp', 
-                args: [`ytsearch:${query}`, '--flat-playlist', '--print', '%(id)s|%(title)s|%(duration)s'],
+                args: [`ytsearch999:${query}`, '--flat-playlist', '--print', '%(id)s|%(title)s|%(duration)s'],
                 parser: (output) => {
                     return output.trim().split('\n')
                         .filter(line => line.trim())
@@ -104,7 +104,7 @@ function searchYouTube(query) {
             },
             { 
                 cmd: 'yt-dlp.exe', 
-                args: [`ytsearch:${query}`, '--flat-playlist', '--print', '%(id)s|%(title)s|%(duration)s'],
+                args: [`ytsearch999:${query}`, '--flat-playlist', '--print', '%(id)s|%(title)s|%(duration)s'],
                 parser: (output) => {
                     return output.trim().split('\n')
                         .filter(line => line.trim())
