@@ -13,6 +13,9 @@ const searchBtn = document.getElementById('searchBtn');
 const searchResults = document.getElementById('searchResults');
 const playIcon = document.getElementById('playIcon');
 const pauseIcon = document.getElementById('pauseIcon');
+const progressBar = document.getElementById('progressBar');
+const currentTimeDisplay = document.getElementById('currentTime');
+const totalTimeDisplay = document.getElementById('totalTime');
 
 let currentStreamUrl = null;
 let isLoading = false;
@@ -32,9 +35,21 @@ volumeValue.textContent = `${volumeSlider.value}%`;
 
 // ===== GLOBAL EVENT LISTENERS (set up once, not in loadStream) =====
 
-// Track current time to detect restarts
+// Track current time to detect restarts and update progress
 audioPlayer.addEventListener('timeupdate', () => {
     const currentTime = audioPlayer.currentTime;
+    const duration = audioPlayer.duration;
+    
+    // Update progress bar
+    if (duration && !isNaN(duration) && duration > 0) {
+        const progress = (currentTime / duration) * 100;
+        progressBar.value = progress;
+        currentTimeDisplay.textContent = formatTime(currentTime);
+        totalTimeDisplay.textContent = formatTime(duration);
+    } else {
+        currentTimeDisplay.textContent = formatTime(currentTime);
+        totalTimeDisplay.textContent = '--:--';
+    }
     
     // Detect if stream restarted (time jumped backwards significantly)
     if (lastCurrentTime > 5 && currentTime < lastCurrentTime - 2 && !audioPlayer.seeking) {
