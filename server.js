@@ -492,11 +492,11 @@ function getRelatedVideos(youtubeUrl) {
         const commands = [
             { 
                 cmd: 'yt-dlp', 
-                args: [youtubeUrl, '--flat-playlist', '--playlist-end', '20', '--print', '%(id)s|%(title)s|%(duration)s'],
+                args: [`${youtubeUrl}&list=RD${youtubeUrl.match(/[?&]v=([^&]+)/)?.[1] || ''}`, '--flat-playlist', '--playlist-end', '21', '--print', '%(id)s|%(title)s|%(duration)s'],
                 parser: (output) => {
                     const lines = output.trim().split('\n').filter(line => line.trim());
-                    // Skip the first video (it's the current one) and get the rest
-                    return lines.slice(1).map(line => {
+                    // Skip the first video (it's the current one) and get up to 20 related
+                    return lines.slice(1, 21).map(line => {
                         const [id, ...rest] = line.split('|');
                         const title = rest.slice(0, -1).join('|');
                         const duration = rest[rest.length - 1];
@@ -511,10 +511,10 @@ function getRelatedVideos(youtubeUrl) {
             },
             { 
                 cmd: 'yt-dlp.exe', 
-                args: [youtubeUrl, '--flat-playlist', '--playlist-end', '20', '--print', '%(id)s|%(title)s|%(duration)s'],
+                args: [`${youtubeUrl}&list=RD${youtubeUrl.match(/[?&]v=([^&]+)/)?.[1] || ''}`, '--flat-playlist', '--playlist-end', '21', '--print', '%(id)s|%(title)s|%(duration)s'],
                 parser: (output) => {
                     const lines = output.trim().split('\n').filter(line => line.trim());
-                    return lines.slice(1).map(line => {
+                    return lines.slice(1, 21).map(line => {
                         const [id, ...rest] = line.split('|');
                         const title = rest.slice(0, -1).join('|');
                         const duration = rest[rest.length - 1];
@@ -526,6 +526,17 @@ function getRelatedVideos(youtubeUrl) {
                         };
                     });
                 }
+            },
+            // Fallback: Use search based on video title
+            { 
+                cmd: 'yt-dlp', 
+                args: [youtubeUrl, '--print', '%(title)s'],
+                parser: (titleOutput) => {
+                    // This is a two-step process - first get title, then search
+                    // For now, return empty and let it fall through to search
+                    return [];
+                },
+                isTwoStep: true
             }
         ];
 
@@ -602,7 +613,10 @@ function getRelatedVideos(youtubeUrl) {
                 }
 
                 if (code !== 0 || !output.trim()) {
-                    console.log(`${cmd} failed with code ${code}`);
+                    console.log(`${cmd} failed with code ${code}. Output length: ${output.length}`);
+                    if (allStderr) {
+                        console.log(`Stderr: ${allStderr.substring(0, 500)}`);
+                    }
                 }
                 attemptIndex++;
                 tryCommand();
@@ -618,6 +632,41 @@ function getRelatedVideos(youtubeUrl) {
         }
 
         tryCommand();
+    });
+}
+
+// Alternative: Get related videos by searching for similar content
+function getRelatedVideosBySearch(youtubeUrl) {
+    return new Promise(async (resolve, reject) => {
+        try {
+            // First, get the video title
+            const titleResult = await new Promise((resolveTitle, rejectTitle) => {
+                const { spawn } = require('child_process');
+                const cmd = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
+                const child = spawn(cmd, [youtubeUrl, '--print', '%(title)s'], { shell: false });
+                
+                let output = '';
+                child.stdout.on('data', (data) => output += data.toString());
+                child.on('close', (code) => {
+                    if (code === 0 && output.trim()) {
+                        resolveTitle(output.trim());
+                    } else {
+                        rejectTitle(new Error('Failed to get video title'));
+                    }
+                });
+                child.on('error', rejectTitle);
+            });
+            
+            // Extract keywords from title (first few words)
+            const keywords = titleResult.split(' ').slice(0, 3).join(' ');
+            
+            // Search for similar videos
+            const videos = await searchYouTube(keywords);
+            // Return first 20 results
+            resolve(videos.slice(0, 20));
+        } catch (error) {
+            reject(error);
+        }
     });
 }
 
@@ -650,12 +699,37 @@ app.get('/related', async (req, res) => {
 
     try {
         console.log(`Related videos request for: ${youtubeUrl}`);
-        const videos = await getRelatedVideos(youtubeUrl);
-        console.log(`Found ${videos.length} related videos`);
+        let videos = [];
+        
+        // Try to get related videos using the main method
+        try {
+            videos = await getRelatedVideos(youtubeUrl);
+            console.log(`Found ${videos.length} related videos using getRelatedVideos`);
+        } catch (error) {
+            console.log(`getRelatedVideos failed: ${error.message}, trying search fallback...`);
+            // Fallback: search for similar videos based on title
+            try {
+                videos = await getRelatedVideosBySearch(youtubeUrl);
+                console.log(`Found ${videos.length} related videos using search fallback`);
+            } catch (searchError) {
+                console.error('Search fallback also failed:', searchError);
+                throw error; // Throw original error
+            }
+        }
+        
+        if (videos.length === 0) {
+            console.warn('No related videos found, returning empty array');
+        }
+        
         res.json({ videos });
     } catch (error) {
         console.error('Related videos error:', error);
-        res.status(500).json({ error: 'Failed to get related videos', details: error.message });
+        console.error('Error stack:', error.stack);
+        res.status(500).json({ 
+            error: 'Failed to get related videos', 
+            details: error.message,
+            hint: 'This might be due to yt-dlp limitations or YouTube API changes'
+        });
     }
 });
 
