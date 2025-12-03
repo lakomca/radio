@@ -661,6 +661,56 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok' });
 });
 
+// Diagnostic endpoint to check if required tools are available
+app.get('/diagnostics', async (req, res) => {
+    const diagnostics = {
+        platform: process.platform,
+        nodeVersion: process.version,
+        tools: {}
+    };
+    
+    // Check yt-dlp
+    const { exec } = require('child_process');
+    const checkTool = (tool) => {
+        return new Promise((resolve) => {
+            exec(`which ${tool} || command -v ${tool}`, (error, stdout) => {
+                if (error) {
+                    resolve({ available: false, path: null, error: error.message });
+                } else {
+                    resolve({ available: true, path: stdout.trim() });
+                }
+            });
+        });
+    };
+    
+    // Check tools
+    diagnostics.tools['yt-dlp'] = await checkTool('yt-dlp');
+    diagnostics.tools['ffmpeg'] = await checkTool('ffmpeg');
+    
+    // Try to get version
+    const getVersion = (tool) => {
+        return new Promise((resolve) => {
+            exec(`${tool} --version`, { timeout: 5000 }, (error, stdout) => {
+                if (error) {
+                    resolve(null);
+                } else {
+                    resolve(stdout.trim().split('\n')[0]);
+                }
+            });
+        });
+    };
+    
+    if (diagnostics.tools['yt-dlp'].available) {
+        diagnostics.tools['yt-dlp'].version = await getVersion('yt-dlp');
+    }
+    
+    if (diagnostics.tools['ffmpeg'].available) {
+        diagnostics.tools['ffmpeg'].version = await getVersion('ffmpeg');
+    }
+    
+    res.json(diagnostics);
+});
+
 // Catch-all route for SPA - serve index.html for any non-API routes
 app.get('*', (req, res) => {
     // Don't serve index.html for API routes
