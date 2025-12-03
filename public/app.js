@@ -644,14 +644,16 @@ function setupInfiniteScroll() {
 
 // Update navigation button states
 function updateNavigationButtons() {
-    if (playlist.length === 0) {
+    // Previous button: only enable if we have a playlist and we're not at the first item
+    if (playlist.length === 0 || currentIndex <= 0) {
         prevBtn.disabled = true;
-        nextBtn.disabled = true;
-        return;
+    } else {
+        prevBtn.disabled = false;
     }
     
-    prevBtn.disabled = currentIndex <= 0;
-    nextBtn.disabled = currentIndex >= playlist.length - 1;
+    // Next button: always enable (it gets related videos dynamically, not from playlist)
+    // The next button doesn't depend on playlist length anymore
+    nextBtn.disabled = false;
 }
 
 // Format duration (seconds to MM:SS)
