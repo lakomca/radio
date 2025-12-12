@@ -79,7 +79,7 @@ audioPlayer.addEventListener('timeupdate', () => {
         if (currentVideoDuration) {
             totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
         } else {
-            totalTimeDisplay.textContent = '--:--';
+        totalTimeDisplay.textContent = '--:--';
         }
         // Reset progress bar when no duration
         if (progressFill) {
@@ -333,9 +333,9 @@ document.addEventListener('click', (e) => {
 
 // Volume slider control
 if (volumeSlider) {
-    volumeSlider.addEventListener('input', (e) => {
-        const volume = e.target.value;
-        audioPlayer.volume = volume / 100;
+volumeSlider.addEventListener('input', (e) => {
+    const volume = e.target.value;
+    audioPlayer.volume = volume / 100;
     });
     
     // Prevent clicks on slider from closing it
@@ -449,9 +449,55 @@ function loadStream(youtubeUrl) {
         audioPlayer.load();
     }, 100);
     
+    // Track progress to detect if data is actually being received
+    let hasReceivedData = false;
+    let progressCheckInterval = null;
+    
+    // Cleanup function for progress checking
+    const cleanupProgressCheck = () => {
+        if (progressCheckInterval) {
+            clearInterval(progressCheckInterval);
+            progressCheckInterval = null;
+        }
+    };
+    
     // Wait for metadata
     audioPlayer.addEventListener('loadstart', () => {
         console.log('📡 Audio loadstart event');
+        hasReceivedData = false;
+        cleanupProgressCheck(); // Clear any existing interval
+        
+        // Start checking for data progress every 2 seconds
+        progressCheckInterval = setInterval(() => {
+            if (isLoading) {
+                const buffered = audioPlayer.buffered;
+                if (buffered.length > 0) {
+                    const bufferedEnd = buffered.end(buffered.length - 1);
+                    if (bufferedEnd > 0) {
+                        hasReceivedData = true;
+                        console.log(`📊 Data received: buffered ${bufferedEnd.toFixed(2)}s, readyState: ${audioPlayer.readyState}`);
+                        
+                        // If we have data and readyState allows, try to play
+                        if (audioPlayer.readyState >= 2 && audioPlayer.paused) {
+                            console.log('Attempting playback with buffered data');
+                            audioPlayer.play().then(() => {
+                                console.log('✅ Audio play started via progress check');
+                                isLoading = false;
+                                updatePlayPauseButton(true);
+                                cleanupProgressCheck();
+                            }).catch(err => {
+                                console.error('❌ Play error in progress check:', err);
+                            });
+                        }
+                    }
+                } else {
+                    console.log(`⏳ Still waiting for data... readyState: ${audioPlayer.readyState}`);
+                }
+            } else {
+                // Stop checking if we're no longer loading
+                cleanupProgressCheck();
+            }
+        }, 2000);
     }, { once: true });
     
     audioPlayer.addEventListener('loadedmetadata', () => {
@@ -466,27 +512,38 @@ function loadStream(youtubeUrl) {
     }, { once: true });
     
     audioPlayer.addEventListener('loadeddata', () => {
-        console.log('✅ Audio data loaded');
+        console.log('✅ Audio data loaded, readyState:', audioPlayer.readyState);
+        hasReceivedData = true;
         // If canplay hasn't fired yet and we're loading, try to play
         if (isLoading && audioPlayer.readyState >= 3) {
             console.log('loadeddata: Attempting to start playback (readyState >= 3)');
             setTimeout(() => {
-                if (isLoading && audioPlayer.readyState >= 3) {
+                if (isLoading && audioPlayer.readyState >= 3 && audioPlayer.paused) {
                     audioPlayer.play().then(() => {
                         console.log('✅ Audio play started via loadeddata');
                         isLoading = false;
                         updatePlayPauseButton(true);
+                        cleanupProgressCheck();
                     }).catch(err => {
                         console.error('❌ Play error in loadeddata:', err);
                     });
                 }
-            }, 500);
+            }, 300);
         }
     }, { once: true });
+    
+    // Progress event to track data download
+    audioPlayer.addEventListener('progress', () => {
+        if (!hasReceivedData) {
+            hasReceivedData = true;
+            console.log('📥 Progress event - data is being received');
+        }
+    });
     
     // Handle errors
     audioPlayer.addEventListener('error', (e) => {
         isLoading = false;
+        cleanupProgressCheck();
         console.error('❌ Audio error:', e);
         console.error('Error code:', audioPlayer.error?.code);
         console.error('Error message:', audioPlayer.error?.message);
@@ -508,27 +565,48 @@ function loadStream(youtubeUrl) {
         }
     }, { once: true });
     
-    // Timeout fallback - try to play if we have some data
+    // Timeout fallback - try multiple shorter timeouts
+    const timeoutChecks = [
+        { time: 5000, message: '5s timeout check' },
+        { time: 10000, message: '10s timeout check' },
+        { time: 15000, message: '15s timeout check' },
+        { time: 20000, message: '20s timeout check' }
+    ];
+    
+    timeoutChecks.forEach(({ time, message }) => {
     setTimeout(() => {
         if (isLoading) {
-            console.warn('⏱️ Load timeout - checking if we can play anyway');
-            if (audioPlayer.readyState >= 2) {
-                // HAVE_CURRENT_DATA (2) or more - we have some data, try to play
-                console.log('ReadyState is', audioPlayer.readyState, '- attempting to play');
-                audioPlayer.play().then(() => {
-                    console.log('✅ Audio play started after timeout');
-                    isLoading = false;
-                    updatePlayPauseButton(true);
-                }).catch(err => {
-                    console.error('❌ Play failed after timeout:', err);
-                    isLoading = false;
-                });
-            } else {
-                console.warn('⏱️ Load timeout - no data available, resetting loading flag');
-                isLoading = false;
+                console.warn(`⏱️ ${message} - readyState: ${audioPlayer.readyState}, buffered: ${audioPlayer.buffered.length > 0 ? audioPlayer.buffered.end(audioPlayer.buffered.length - 1).toFixed(2) + 's' : 'none'}`);
+                if (audioPlayer.readyState >= 2 || hasReceivedData) {
+                    // HAVE_CURRENT_DATA (2) or more - we have some data, try to play
+                    console.log(`Attempting to play - readyState: ${audioPlayer.readyState}, hasReceivedData: ${hasReceivedData}`);
+                    audioPlayer.play().then(() => {
+                        console.log(`✅ Audio play started after ${message}`);
+                        isLoading = false;
+                        updatePlayPauseButton(true);
+                        cleanupProgressCheck();
+                    }).catch(err => {
+                        console.error(`❌ Play failed after ${message}:`, err);
+                        // Don't reset isLoading on first few attempts - might just need more time
+                        if (time >= 15000) {
+                            isLoading = false;
+                        }
+                    });
+                }
             }
+        }, time);
+    });
+    
+    // Final timeout - give up after 25 seconds
+    setTimeout(() => {
+        cleanupProgressCheck();
+        if (isLoading) {
+            console.error('⏱️ Final timeout (25s) - giving up on loading');
+            isLoading = false;
+            playPauseBtn.disabled = false;
+            updatePlayPauseButton(false);
         }
-    }, 30000);
+    }, 25000);
     
     // Auto-play when loaded - only for new streams
     const canplayHandler = () => {
@@ -550,10 +628,12 @@ function loadStream(youtubeUrl) {
                 console.log('✅ Audio play started');
                 isLoading = false; // Mark as loaded after successful play
                 updatePlayPauseButton(true);
+                cleanupProgressCheck();
             }).catch(err => {
                 console.error('❌ Play error:', err);
                 isLoading = false; // Mark as loaded even on error
                 isHandlingEnded = false;
+                cleanupProgressCheck();
             });
         } else {
             // If isLoading is false but canplay fires, it might be buffering recovery
@@ -863,7 +943,7 @@ async function searchYouTube(query) {
         if (error.name === 'AbortError') {
             searchResults.innerHTML = '<div class="error">Search timed out. The server may be slow. Please try again.</div>';
         } else {
-            searchResults.innerHTML = '<div class="error">Failed to search. Please try again.</div>';
+        searchResults.innerHTML = '<div class="error">Failed to search. Please try again.</div>';
         }
     }
 }
@@ -1000,7 +1080,7 @@ function updateVideoThumbnail(videoId) {
         if (videoId) {
             const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
             videoThumbnail.innerHTML = `<img src="${thumbnailUrl}" alt="Video thumbnail" />`;
-        } else {
+    } else {
             videoThumbnail.innerHTML = '<div class="thumbnail-placeholder">No video</div>';
         }
     }
@@ -1127,7 +1207,7 @@ if (customProgressBar) {
                 audioPlayer.currentTime = seekTime;
                 isSeeking = false;
             } else {
-                isSeeking = true;
+        isSeeking = true;
             }
         }
     }
@@ -1153,7 +1233,7 @@ if (customProgressBar) {
             if (progressFill && audioPlayer.duration && !isNaN(audioPlayer.duration) && isFinite(audioPlayer.duration)) {
                 const percent = parseFloat(progressFill.style.width);
                 const seekTime = (percent / 100) * audioPlayer.duration;
-                audioPlayer.currentTime = seekTime;
+            audioPlayer.currentTime = seekTime;
             }
             isSeeking = false;
         }
@@ -1167,8 +1247,8 @@ if (customProgressBar) {
                 const percent = parseFloat(progressFill.style.width);
                 const seekTime = (percent / 100) * audioPlayer.duration;
                 audioPlayer.currentTime = seekTime;
-            }
-            isSeeking = false;
+        }
+        isSeeking = false;
         }
     });
 }
