@@ -6,6 +6,8 @@ const stopBtn = document.getElementById('stopBtn');
 const repeatBtn = document.getElementById('repeatBtn');
 const autoplayBtn = document.getElementById('autoplayBtn');
 const volumeSlider = document.getElementById('volumeSlider');
+const volumeBtn = document.getElementById('volumeBtn');
+const volumeSliderContainer = document.getElementById('volumeSliderContainer');
 const searchQueryInput = document.getElementById('searchQuery');
 const searchBtn = document.getElementById('searchBtn');
 const searchResults = document.getElementById('searchResults');
@@ -15,15 +17,19 @@ const repeatIcon = document.getElementById('repeatIcon');
 const repeatOneIcon = document.getElementById('repeatOneIcon');
 const autoplayOnIcon = document.getElementById('autoplayOnIcon');
 const autoplayOffIcon = document.getElementById('autoplayOffIcon');
-const progressBar = document.getElementById('progressBar');
+const customProgressBar = document.getElementById('customProgressBar');
+const progressFill = document.getElementById('progressFill');
+const progressThumb = document.getElementById('progressThumb');
 const currentTimeDisplay = document.getElementById('currentTime');
 const totalTimeDisplay = document.getElementById('totalTime');
 const nowPlayingTitle = document.getElementById('nowPlayingTitle');
+const videoThumbnail = document.getElementById('videoThumbnail');
 
 let currentStreamUrl = null;
 let currentVideoUrl = null; // Track current video URL (replaces youtubeUrlInput)
 let currentVideoDuration = null; // Track current video duration from search results
 let currentVideoTitle = null; // Track current video title
+let currentVideoId = null; // Track current video ID for thumbnail
 let isLoading = false;
 let playlist = []; // Array to store playlist
 let currentIndex = -1; // Current song index in playlist
@@ -33,10 +39,11 @@ let lastCurrentTime = 0;
 let streamStartTime = null; // Track when stream started
 let allSearchVideos = []; // Store all search results
 let displayedVideosCount = 0; // Track how many videos are currently displayed
-const VIDEOS_PER_BATCH = 10; // Number of videos to load per batch
+const VIDEOS_PER_BATCH = 9; // Number of videos to load per batch
 let loadMoreBtn = null; // Reference to load more button
 let autoplayEnabled = true; // Autoplay is enabled by default
 let repeatMode = 0; // 0 = off, 1 = repeat all, 2 = repeat one
+let isHandlingEnded = false; // Prevent multiple ended handlers from running simultaneously
 
 // Set initial volume
 audioPlayer.volume = volumeSlider.value / 100;
@@ -56,7 +63,14 @@ audioPlayer.addEventListener('timeupdate', () => {
     
     if (displayDuration && displayDuration > 0) {
         const progress = displayDuration > 0 ? (currentTime / displayDuration) * 100 : 0;
-        progressBar.value = Math.min(progress, 100);
+        const progressPercent = Math.min(progress, 100);
+        // Update custom progress bar - only if not seeking
+        if (progressFill && !isSeeking) {
+            progressFill.style.width = progressPercent + '%';
+        }
+        if (progressThumb && !isSeeking) {
+            progressThumb.style.left = progressPercent + '%';
+        }
         currentTimeDisplay.textContent = formatTime(currentTime);
         totalTimeDisplay.textContent = formatTime(displayDuration);
     } else {
@@ -65,6 +79,13 @@ audioPlayer.addEventListener('timeupdate', () => {
             totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
         } else {
             totalTimeDisplay.textContent = '--:--';
+        }
+        // Reset progress bar when no duration
+        if (progressFill) {
+            progressFill.style.width = '0%';
+        }
+        if (progressThumb) {
+            progressThumb.style.left = '0%';
         }
     }
     
@@ -165,6 +186,8 @@ prevBtn.addEventListener('click', () => {
         currentVideoUrl = prevVideo.url;
         currentVideoDuration = prevVideo.duration;
         currentVideoTitle = prevVideo.title;
+        currentVideoId = prevVideo.id || getVideoIdFromUrl(prevVideo.url);
+        updateVideoThumbnail(currentVideoId);
         updateNowPlayingTitle(prevVideo.title);
         highlightCurrentVideo(prevVideo.url);
         if (currentVideoDuration && totalTimeDisplay) {
@@ -185,6 +208,8 @@ nextBtn.addEventListener('click', async () => {
             currentVideoUrl = nextVideo.url;
             currentVideoDuration = nextVideo.duration;
             currentVideoTitle = nextVideo.title;
+            currentVideoId = nextVideo.id || getVideoIdFromUrl(nextVideo.url);
+            updateVideoThumbnail(currentVideoId);
             updateNowPlayingTitle(nextVideo.title);
             highlightCurrentVideo(nextVideo.url);
             if (currentVideoDuration && totalTimeDisplay) {
@@ -205,8 +230,15 @@ nextBtn.addEventListener('click', async () => {
             currentVideoUrl = nextVideo.url;
             currentVideoDuration = nextVideo.duration;
             currentVideoTitle = nextVideo.title;
+            currentVideoId = nextVideo.id || getVideoIdFromUrl(nextVideo.url);
+            updateVideoThumbnail(currentVideoId);
             updateNowPlayingTitle(nextVideo.title);
-            playlist = allSearchVideos;
+            playlist = allSearchVideos.map(v => ({
+                title: v.title,
+                url: v.url,
+                duration: v.duration,
+                id: v.id || getVideoIdFromUrl(v.url)
+            }));
             highlightCurrentVideo(nextVideo.url);
             if (currentVideoDuration && totalTimeDisplay) {
                 totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
@@ -261,13 +293,39 @@ stopBtn.addEventListener('click', () => {
     audioPlayer.currentTime = 0;
     updatePlayPauseButton(false);
     updateNowPlayingTitle(null);
+    updateVideoThumbnail(null);
 });
 
-// Volume control
-volumeSlider.addEventListener('input', (e) => {
-    const volume = e.target.value;
-    audioPlayer.volume = volume / 100;
+// Volume control - toggle slider on button click
+if (volumeBtn && volumeSliderContainer) {
+    volumeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isVisible = volumeSliderContainer.style.display !== 'none';
+        volumeSliderContainer.style.display = isVisible ? 'none' : 'flex';
+    });
+}
+
+// Close volume slider when clicking outside
+document.addEventListener('click', (e) => {
+    if (volumeSliderContainer && volumeBtn) {
+        if (!volumeBtn.contains(e.target) && !volumeSliderContainer.contains(e.target)) {
+            volumeSliderContainer.style.display = 'none';
+        }
+    }
 });
+
+// Volume slider control
+if (volumeSlider) {
+    volumeSlider.addEventListener('input', (e) => {
+        const volume = e.target.value;
+        audioPlayer.volume = volume / 100;
+    });
+    
+    // Prevent clicks on slider from closing it
+    volumeSlider.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+}
 
 // Repeat button functionality - only changes mode, doesn't trigger immediate repeat
 // Actual repeating happens in the ended event handler when song finishes
@@ -356,9 +414,12 @@ function loadStream(youtubeUrl) {
         audioPlayer.removeAttribute('src');
         audioPlayer.load();
         
-        // Reset tracking variables
+        // Reset tracking variables and time display immediately
         lastCurrentTime = 0;
         isBuffering = false;
+        if (currentTimeDisplay) currentTimeDisplay.textContent = '0:00';
+        if (progressFill) progressFill.style.width = '0%';
+        if (progressThumb) progressThumb.style.left = '0%';
     } catch (e) {
         console.warn('Error resetting audio player:', e);
     }
@@ -380,6 +441,10 @@ function loadStream(youtubeUrl) {
         isLoading = false;
         playPauseBtn.disabled = false;
         updateNavigationButtons();
+        // Ensure time display is reset when new stream loads
+        if (currentTimeDisplay) currentTimeDisplay.textContent = '0:00';
+        if (progressFill) progressFill.style.width = '0%';
+        if (progressThumb) progressThumb.style.left = '0%';
     }, { once: true });
     
     audioPlayer.addEventListener('loadeddata', () => {
@@ -409,11 +474,23 @@ function loadStream(youtubeUrl) {
     // Auto-play when loaded
     audioPlayer.addEventListener('canplay', () => {
         console.log('▶️ Audio can play');
+        // Ensure time is reset before playing
+        if (audioPlayer.currentTime > 0.1) {
+            audioPlayer.currentTime = 0;
+        }
+        if (currentTimeDisplay) currentTimeDisplay.textContent = '0:00';
+        if (progressFill) progressFill.style.width = '0%';
+        if (progressThumb) progressThumb.style.left = '0%';
+        lastCurrentTime = 0;
+        // Reset ended handler flag when new stream is ready to play
+        isHandlingEnded = false;
+        
         audioPlayer.play().then(() => {
             console.log('✅ Audio play started');
             updatePlayPauseButton(true);
         }).catch(err => {
             console.error('❌ Play error:', err);
+            isHandlingEnded = false;
         });
     }, { once: true });
     
@@ -434,6 +511,12 @@ function setupEndedListener() {
     
     // Create new handler
     endedHandler = () => {
+        // Prevent multiple ended handlers from running simultaneously
+        if (isHandlingEnded) {
+            console.log('⚠️ Already handling ended event, skipping...');
+            return;
+        }
+        
         console.log('🏁 Song ended event fired');
         console.log('Audio ended:', audioPlayer.ended);
         console.log('Audio error:', audioPlayer.error);
@@ -448,14 +531,24 @@ function setupEndedListener() {
                                  Math.abs(audioPlayer.currentTime - audioPlayer.duration) < 2);
         
         if (isActuallyEnded) {
+            isHandlingEnded = true;
             console.log('✅ Song actually ended');
             
             // Check repeat mode first
             if (repeatMode === 2) {
-                // Repeat one - replay current song
+                // Repeat one - reload and replay current song from beginning
                 console.log('🔄 Repeating current song');
-                audioPlayer.currentTime = 0;
-                audioPlayer.play();
+                if (currentVideoUrl) {
+                    // Reset time display before reloading
+                    if (currentTimeDisplay) currentTimeDisplay.textContent = '0:00';
+                    if (progressFill) progressFill.style.width = '0%';
+                    if (progressThumb) progressThumb.style.left = '0%';
+                    // Reload the stream to restart it properly
+                    loadStream(currentVideoUrl);
+                    // Flag will be reset when new stream starts playing
+                } else {
+                    isHandlingEnded = false;
+                }
                 return;
             }
             
@@ -463,6 +556,7 @@ function setupEndedListener() {
             if (!autoplayEnabled) {
                 console.log('⏸️ Autoplay disabled, stopping');
                 updatePlayPauseButton(false);
+                isHandlingEnded = false;
                 return;
             }
             
@@ -476,13 +570,16 @@ function setupEndedListener() {
                 currentVideoUrl = nextVideo.url;
                 currentVideoDuration = nextVideo.duration;
                 currentVideoTitle = nextVideo.title;
+                currentVideoId = nextVideo.id || getVideoIdFromUrl(nextVideo.url);
+                updateVideoThumbnail(currentVideoId);
                 updateNowPlayingTitle(nextVideo.title);
                 highlightCurrentVideo(nextVideo.url);
                 if (currentVideoDuration && totalTimeDisplay) {
                     totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
                 }
-                loadStream(nextVideo.url);
-                return;
+                    loadStream(nextVideo.url);
+                    // Flag will be reset when new stream starts playing
+                    return;
             }
             
             // First try to play next from search results
@@ -492,13 +589,16 @@ function setupEndedListener() {
                 currentVideoUrl = nextVideo.url;
                 currentVideoDuration = nextVideo.duration;
                 currentVideoTitle = nextVideo.title;
+                currentVideoId = nextVideo.id || getVideoIdFromUrl(nextVideo.url);
+                updateVideoThumbnail(currentVideoId);
                 updateNowPlayingTitle(nextVideo.title);
                 highlightCurrentVideo(nextVideo.url);
                 if (currentVideoDuration && totalTimeDisplay) {
                     totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
                 }
-                loadStream(nextVideo.url);
-                return;
+                    loadStream(nextVideo.url);
+                    // Flag will be reset when new stream starts playing
+                    return;
             }
             
             // Try from allSearchVideos if available
@@ -510,13 +610,21 @@ function setupEndedListener() {
                     currentVideoUrl = nextVideo.url;
                     currentVideoDuration = nextVideo.duration;
                     currentVideoTitle = nextVideo.title;
+                    currentVideoId = nextVideo.id || getVideoIdFromUrl(nextVideo.url);
+                    updateVideoThumbnail(currentVideoId);
                     updateNowPlayingTitle(nextVideo.title);
-                    playlist = allSearchVideos;
+                    playlist = allSearchVideos.map(v => ({
+                        title: v.title,
+                        url: v.url,
+                        duration: v.duration,
+                        id: v.id || getVideoIdFromUrl(v.url)
+                    }));
                     highlightCurrentVideo(nextVideo.url);
                     if (currentVideoDuration && totalTimeDisplay) {
                         totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
                     }
                     loadStream(nextVideo.url);
+                    // Flag will be reset when new stream starts playing
                     return;
                 } else if (repeatMode === 1 && currentIndexInSearch === allSearchVideos.length - 1) {
                     // Loop back to start if repeat all
@@ -525,13 +633,21 @@ function setupEndedListener() {
                     currentVideoUrl = nextVideo.url;
                     currentVideoDuration = nextVideo.duration;
                     currentVideoTitle = nextVideo.title;
+                    currentVideoId = nextVideo.id || getVideoIdFromUrl(nextVideo.url);
+                    updateVideoThumbnail(currentVideoId);
                     updateNowPlayingTitle(nextVideo.title);
-                    playlist = allSearchVideos;
+                    playlist = allSearchVideos.map(v => ({
+                        title: v.title,
+                        url: v.url,
+                        duration: v.duration,
+                        id: v.id || getVideoIdFromUrl(v.url)
+                    }));
                     highlightCurrentVideo(nextVideo.url);
                     if (currentVideoDuration && totalTimeDisplay) {
                         totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
                     }
                     loadStream(nextVideo.url);
+                    // Flag will be reset when new stream starts playing
                     return;
                 }
             }
@@ -546,6 +662,8 @@ function setupEndedListener() {
                             const nextVideo = data.videos[0];
                             currentVideoUrl = nextVideo.url;
                             currentVideoTitle = nextVideo.title;
+                            currentVideoId = nextVideo.id || getVideoIdFromUrl(nextVideo.url);
+                            updateVideoThumbnail(currentVideoId);
                             updateNowPlayingTitle(nextVideo.title);
                             currentIndex = -1;
                             playlist = [nextVideo];
@@ -705,15 +823,18 @@ function loadMoreVideos() {
             currentVideoUrl = video.url;
             currentVideoDuration = video.duration; // Store duration from search results
             currentVideoTitle = video.title; // Store title
+            currentVideoId = video.id || getVideoIdFromUrl(video.url); // Store video ID for thumbnail
             
             // Update playlist with all search results
             playlist = allSearchVideos.map(v => ({
                 title: v.title,
                 url: v.url,
-                duration: v.duration
+                duration: v.duration,
+                id: v.id || getVideoIdFromUrl(v.url)
             }));
             
-            // Update now playing title
+            // Update thumbnail and title
+            updateVideoThumbnail(currentVideoId);
             updateNowPlayingTitle(video.title);
             
             // Highlight the currently playing video
@@ -738,7 +859,8 @@ function loadMoreVideos() {
     playlist = allSearchVideos.map(v => ({
         title: v.title,
         url: v.url,
-        duration: v.duration
+        duration: v.duration,
+        id: v.id || getVideoIdFromUrl(v.url)
     }));
     
     updateNavigationButtons();
@@ -764,6 +886,25 @@ function loadMoreVideos() {
         
         container.appendChild(loadMoreBtn);
         searchResults.appendChild(container);
+    }
+}
+
+// Extract video ID from YouTube URL
+function getVideoIdFromUrl(url) {
+    if (!url) return null;
+    const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/);
+    return match ? match[1] : null;
+}
+
+// Update video thumbnail
+function updateVideoThumbnail(videoId) {
+    if (videoThumbnail) {
+        if (videoId) {
+            const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+            videoThumbnail.innerHTML = `<img src="${thumbnailUrl}" alt="Video thumbnail" />`;
+        } else {
+            videoThumbnail.innerHTML = '<div class="thumbnail-placeholder">No video</div>';
+        }
     }
 }
 
@@ -859,22 +1000,78 @@ function formatTime(seconds) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-// Progress bar seeking
-let isSeeking = false;
-if (progressBar) {
-    progressBar.addEventListener('input', () => {
-        isSeeking = true;
-    });
-
-    progressBar.addEventListener('change', () => {
-        if (audioPlayer.duration && !isNaN(audioPlayer.duration) && isFinite(audioPlayer.duration)) {
-            const seekTime = (progressBar.value / 100) * audioPlayer.duration;
-            audioPlayer.currentTime = seekTime;
+// Progress bar seeking functionality
+if (customProgressBar) {
+    let isDragging = false;
+    
+    function updateProgressFromMouse(e) {
+        const rect = customProgressBar.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const percent = Math.max(0, Math.min(100, (x / rect.width) * 100));
+        
+        if (progressFill) {
+            progressFill.style.width = percent + '%';
+        }
+        if (progressThumb) {
+            progressThumb.style.left = percent + '%';
+        }
+        
+        // Update time display
+        const duration = audioPlayer.duration || (currentVideoDuration ? parseInt(currentVideoDuration) : null);
+        if (duration && !isNaN(duration) && isFinite(duration) && duration > 0) {
+            const seekTime = (percent / 100) * duration;
             if (currentTimeDisplay) {
                 currentTimeDisplay.textContent = formatTime(seekTime);
             }
+            
+            // Only seek audio if mouse is released (not while dragging)
+            if (!isDragging && !e.buttons) {
+                audioPlayer.currentTime = seekTime;
+                isSeeking = false;
+            } else {
+                isSeeking = true;
+            }
         }
-        isSeeking = false;
+    }
+    
+    customProgressBar.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        isSeeking = true;
+        customProgressBar.classList.add('dragging');
+        updateProgressFromMouse(e);
+    });
+    
+    customProgressBar.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+            updateProgressFromMouse(e);
+        }
+    });
+    
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            customProgressBar.classList.remove('dragging');
+            // Final seek when mouse is released
+            if (progressFill && audioPlayer.duration && !isNaN(audioPlayer.duration) && isFinite(audioPlayer.duration)) {
+                const percent = parseFloat(progressFill.style.width);
+                const seekTime = (percent / 100) * audioPlayer.duration;
+                audioPlayer.currentTime = seekTime;
+            }
+            isSeeking = false;
+        }
+    });
+    
+    customProgressBar.addEventListener('click', (e) => {
+        if (!isDragging) {
+            updateProgressFromMouse(e);
+            // Immediate seek on click
+            if (progressFill && audioPlayer.duration && !isNaN(audioPlayer.duration) && isFinite(audioPlayer.duration)) {
+                const percent = parseFloat(progressFill.style.width);
+                const seekTime = (percent / 100) * audioPlayer.duration;
+                audioPlayer.currentTime = seekTime;
+            }
+            isSeeking = false;
+        }
     });
 }
 
@@ -892,7 +1089,8 @@ audioPlayer.addEventListener('loadedmetadata', () => {
 
 // Reset progress when stream ends
 audioPlayer.addEventListener('ended', () => {
-    if (progressBar) progressBar.value = 0;
+    if (progressFill) progressFill.style.width = '0%';
+    if (progressThumb) progressThumb.style.left = '0%';
     if (currentTimeDisplay) currentTimeDisplay.textContent = '0:00';
 });
 
@@ -900,7 +1098,8 @@ audioPlayer.addEventListener('ended', () => {
 if (stopBtn) {
     const originalStopHandler = stopBtn.onclick;
     stopBtn.addEventListener('click', () => {
-        if (progressBar) progressBar.value = 0;
+        if (progressFill) progressFill.style.width = '0%';
+        if (progressThumb) progressThumb.style.left = '0%';
         if (currentTimeDisplay) currentTimeDisplay.textContent = '0:00';
     });
 }
