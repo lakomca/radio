@@ -44,6 +44,7 @@ let loadMoreBtn = null; // Reference to load more button
 let autoplayEnabled = true; // Autoplay is enabled by default
 let repeatMode = 0; // 0 = off, 1 = repeat all, 2 = repeat one
 let isHandlingEnded = false; // Prevent multiple ended handlers from running simultaneously
+let isSeeking = false; // Track if user is seeking on progress bar
 
 // Set initial volume
 audioPlayer.volume = volumeSlider.value / 100;
