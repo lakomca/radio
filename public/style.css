@@ -78,6 +78,17 @@ body {
     margin: 0;
 }
 
+.now-playing-title {
+    font-size: 0.85em;
+    color: #ffffff;
+    font-weight: 500;
+    margin-bottom: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
 .navbar-progress-section .progress-info {
     display: flex;
     justify-content: space-between;
@@ -180,7 +191,7 @@ body {
     border-radius: 8px;
     font-size: 0.95em;
     background: #1a2a2f;
-    color: #ffffff;
+    color: #00d9ff;
     transition: all 0.3s ease;
 }
 
@@ -262,12 +273,27 @@ body {
 .prev-btn:disabled, .next-btn:disabled {
     opacity: 0.3;
     cursor: not-allowed;
-    background: #1a1a1a;
+    background: #1a2a2f;
 }
 
 .prev-btn:disabled:hover, .next-btn:disabled:hover {
     transform: none;
-    background: #1a1a1a;
+    background: #1a2a2f;
+}
+
+.repeat-btn, .autoplay-btn {
+    width: 36px;
+    height: 36px;
+}
+
+.control-btn.active {
+    background: linear-gradient(135deg, #00d9ff 0%, #ffaa33 50%, #ff8800 100%);
+    color: #0a1a1f;
+    box-shadow: 0 0 10px rgba(0, 217, 255, 0.4);
+}
+
+.control-btn.active:hover {
+    box-shadow: 0 0 15px rgba(0, 217, 255, 0.6);
 }
 
 
@@ -371,6 +397,16 @@ body {
     border-color: #00d9ff;
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0, 217, 255, 0.2);
+}
+
+.result-item.playing {
+    background: #1a3a4f;
+    border: 2px solid #00d9ff;
+    box-shadow: 0 0 20px rgba(0, 217, 255, 0.4);
+}
+
+.result-item.playing h3 {
+    color: #00d9ff;
 }
 
 .result-item h3 {

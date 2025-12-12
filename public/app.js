@@ -3,6 +3,8 @@ const playPauseBtn = document.getElementById('playPauseBtn');
 const prevBtn = document.getElementById('prevBtn');
 const nextBtn = document.getElementById('nextBtn');
 const stopBtn = document.getElementById('stopBtn');
+const repeatBtn = document.getElementById('repeatBtn');
+const autoplayBtn = document.getElementById('autoplayBtn');
 const volumeSlider = document.getElementById('volumeSlider');
 const volumeValue = document.getElementById('volumeValue');
 const searchQueryInput = document.getElementById('searchQuery');
@@ -10,12 +12,19 @@ const searchBtn = document.getElementById('searchBtn');
 const searchResults = document.getElementById('searchResults');
 const playIcon = document.getElementById('playIcon');
 const pauseIcon = document.getElementById('pauseIcon');
+const repeatIcon = document.getElementById('repeatIcon');
+const repeatOneIcon = document.getElementById('repeatOneIcon');
+const autoplayOnIcon = document.getElementById('autoplayOnIcon');
+const autoplayOffIcon = document.getElementById('autoplayOffIcon');
 const progressBar = document.getElementById('progressBar');
 const currentTimeDisplay = document.getElementById('currentTime');
 const totalTimeDisplay = document.getElementById('totalTime');
+const nowPlayingTitle = document.getElementById('nowPlayingTitle');
 
 let currentStreamUrl = null;
 let currentVideoUrl = null; // Track current video URL (replaces youtubeUrlInput)
+let currentVideoDuration = null; // Track current video duration from search results
+let currentVideoTitle = null; // Track current video title
 let isLoading = false;
 let playlist = []; // Array to store playlist
 let currentIndex = -1; // Current song index in playlist
@@ -27,6 +36,8 @@ let allSearchVideos = []; // Store all search results
 let displayedVideosCount = 0; // Track how many videos are currently displayed
 const VIDEOS_PER_BATCH = 10; // Number of videos to load per batch
 let loadMoreBtn = null; // Reference to load more button
+let autoplayEnabled = true; // Autoplay is enabled by default
+let repeatMode = 0; // 0 = off, 1 = repeat all, 2 = repeat one
 
 // Set initial volume
 audioPlayer.volume = volumeSlider.value / 100;
@@ -40,14 +51,23 @@ audioPlayer.addEventListener('timeupdate', () => {
     const duration = audioPlayer.duration;
     
     // Update progress bar
-    if (duration && !isNaN(duration) && isFinite(duration) && duration > 0) {
-        const progress = (currentTime / duration) * 100;
-        progressBar.value = progress;
+    // Use actual duration if available, otherwise fall back to stored duration from search results
+    const displayDuration = (duration && !isNaN(duration) && isFinite(duration) && duration > 0) 
+        ? duration 
+        : (currentVideoDuration ? parseInt(currentVideoDuration) : null);
+    
+    if (displayDuration && displayDuration > 0) {
+        const progress = displayDuration > 0 ? (currentTime / displayDuration) * 100 : 0;
+        progressBar.value = Math.min(progress, 100);
         currentTimeDisplay.textContent = formatTime(currentTime);
-        totalTimeDisplay.textContent = formatTime(duration);
+        totalTimeDisplay.textContent = formatTime(displayDuration);
     } else {
         currentTimeDisplay.textContent = formatTime(currentTime);
-        totalTimeDisplay.textContent = '--:--';
+        if (currentVideoDuration) {
+            totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
+        } else {
+            totalTimeDisplay.textContent = '--:--';
+        }
     }
     
     // Detect if stream restarted (time jumped backwards significantly)
@@ -143,15 +163,64 @@ prevBtn.addEventListener('click', () => {
     
     if (currentIndex > 0) {
         currentIndex--;
-        loadStream(playlist[currentIndex].url);
+        const prevVideo = playlist[currentIndex];
+        currentVideoUrl = prevVideo.url;
+        currentVideoDuration = prevVideo.duration;
+        currentVideoTitle = prevVideo.title;
+        updateNowPlayingTitle(prevVideo.title);
+        highlightCurrentVideo(prevVideo.url);
+        if (currentVideoDuration && totalTimeDisplay) {
+            totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
+        }
+        loadStream(prevVideo.url);
     }
 });
 
-// Next button functionality - get next recommended video like YouTube
+// Next button functionality - play next song from search results
 nextBtn.addEventListener('click', async () => {
-    // Get current YouTube URL
-    const currentUrl = currentVideoUrl;
+    // Check if we have a playlist from search results
+    if (playlist.length > 0 && currentIndex >= 0) {
+        // Play next song from search results
+        if (currentIndex < playlist.length - 1) {
+            currentIndex++;
+            const nextVideo = playlist[currentIndex];
+            currentVideoUrl = nextVideo.url;
+            currentVideoDuration = nextVideo.duration;
+            currentVideoTitle = nextVideo.title;
+            updateNowPlayingTitle(nextVideo.title);
+            highlightCurrentVideo(nextVideo.url);
+            if (currentVideoDuration && totalTimeDisplay) {
+                totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
+            }
+            loadStream(nextVideo.url);
+            updateNavigationButtons();
+            return;
+        }
+    }
     
+    // Fallback: try to get next from current search results if available
+    if (allSearchVideos.length > 0 && currentVideoUrl) {
+        const currentIndexInSearch = allSearchVideos.findIndex(v => v.url === currentVideoUrl);
+        if (currentIndexInSearch >= 0 && currentIndexInSearch < allSearchVideos.length - 1) {
+            const nextVideo = allSearchVideos[currentIndexInSearch + 1];
+            currentIndex = currentIndexInSearch + 1;
+            currentVideoUrl = nextVideo.url;
+            currentVideoDuration = nextVideo.duration;
+            currentVideoTitle = nextVideo.title;
+            updateNowPlayingTitle(nextVideo.title);
+            playlist = allSearchVideos;
+            highlightCurrentVideo(nextVideo.url);
+            if (currentVideoDuration && totalTimeDisplay) {
+                totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
+            }
+            loadStream(nextVideo.url);
+            updateNavigationButtons();
+            return;
+        }
+    }
+    
+    // If no search results available, try related videos as fallback
+    const currentUrl = currentVideoUrl;
     if (!currentUrl) {
         return;
     }
@@ -160,7 +229,7 @@ nextBtn.addEventListener('click', async () => {
     nextBtn.disabled = true;
     
     try {
-        // Fetch related videos
+        // Fetch related videos as fallback
         const response = await fetch(`/related?url=${encodeURIComponent(currentUrl)}`);
         const data = await response.json();
         
@@ -172,11 +241,12 @@ nextBtn.addEventListener('click', async () => {
         // Play the first recommended video
         const nextVideo = data.videos[0];
         currentVideoUrl = nextVideo.url;
-        currentIndex = -1; // Reset index since we're not using playlist
-        playlist = [nextVideo]; // Store as single item for display
+        currentVideoTitle = nextVideo.title;
+        updateNowPlayingTitle(nextVideo.title);
+        currentIndex = -1;
+        playlist = [nextVideo];
         loadStream(nextVideo.url);
         
-        // Ensure next button stays enabled after loading
         updateNavigationButtons();
     } catch (error) {
         console.error('Error getting next video:', error);
@@ -192,6 +262,7 @@ stopBtn.addEventListener('click', () => {
     audioPlayer.pause();
     audioPlayer.currentTime = 0;
     updatePlayPauseButton(false);
+    updateNowPlayingTitle(null);
 });
 
 // Volume control
@@ -333,8 +404,95 @@ function setupEndedListener() {
                                  Math.abs(audioPlayer.currentTime - audioPlayer.duration) < 2);
         
         if (isActuallyEnded) {
-            console.log('✅ Song actually ended, getting next recommended video');
-            // Auto-play next recommended video (like YouTube autoplay)
+            console.log('✅ Song actually ended');
+            
+            // Check repeat mode first
+            if (repeatMode === 2) {
+                // Repeat one - replay current song
+                console.log('🔄 Repeating current song');
+                audioPlayer.currentTime = 0;
+                audioPlayer.play();
+                return;
+            }
+            
+            // If autoplay is disabled, just stop
+            if (!autoplayEnabled) {
+                console.log('⏸️ Autoplay disabled, stopping');
+                updatePlayPauseButton(false);
+                return;
+            }
+            
+            console.log('▶️ Autoplay enabled, playing next song');
+            
+            // Check if we should repeat playlist (repeat all mode)
+            if (repeatMode === 1 && playlist.length > 0 && currentIndex === playlist.length - 1) {
+                // Loop back to start of playlist
+                currentIndex = 0;
+                const nextVideo = playlist[currentIndex];
+                currentVideoUrl = nextVideo.url;
+                currentVideoDuration = nextVideo.duration;
+                currentVideoTitle = nextVideo.title;
+                updateNowPlayingTitle(nextVideo.title);
+                highlightCurrentVideo(nextVideo.url);
+                if (currentVideoDuration && totalTimeDisplay) {
+                    totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
+                }
+                loadStream(nextVideo.url);
+                return;
+            }
+            
+            // First try to play next from search results
+            if (playlist.length > 0 && currentIndex >= 0 && currentIndex < playlist.length - 1) {
+                currentIndex++;
+                const nextVideo = playlist[currentIndex];
+                currentVideoUrl = nextVideo.url;
+                currentVideoDuration = nextVideo.duration;
+                currentVideoTitle = nextVideo.title;
+                updateNowPlayingTitle(nextVideo.title);
+                highlightCurrentVideo(nextVideo.url);
+                if (currentVideoDuration && totalTimeDisplay) {
+                    totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
+                }
+                loadStream(nextVideo.url);
+                return;
+            }
+            
+            // Try from allSearchVideos if available
+            if (allSearchVideos.length > 0 && currentVideoUrl) {
+                const currentIndexInSearch = allSearchVideos.findIndex(v => v.url === currentVideoUrl);
+                if (currentIndexInSearch >= 0 && currentIndexInSearch < allSearchVideos.length - 1) {
+                    const nextVideo = allSearchVideos[currentIndexInSearch + 1];
+                    currentIndex = currentIndexInSearch + 1;
+                    currentVideoUrl = nextVideo.url;
+                    currentVideoDuration = nextVideo.duration;
+                    currentVideoTitle = nextVideo.title;
+                    updateNowPlayingTitle(nextVideo.title);
+                    playlist = allSearchVideos;
+                    highlightCurrentVideo(nextVideo.url);
+                    if (currentVideoDuration && totalTimeDisplay) {
+                        totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
+                    }
+                    loadStream(nextVideo.url);
+                    return;
+                } else if (repeatMode === 1 && currentIndexInSearch === allSearchVideos.length - 1) {
+                    // Loop back to start if repeat all
+                    const nextVideo = allSearchVideos[0];
+                    currentIndex = 0;
+                    currentVideoUrl = nextVideo.url;
+                    currentVideoDuration = nextVideo.duration;
+                    currentVideoTitle = nextVideo.title;
+                    updateNowPlayingTitle(nextVideo.title);
+                    playlist = allSearchVideos;
+                    highlightCurrentVideo(nextVideo.url);
+                    if (currentVideoDuration && totalTimeDisplay) {
+                        totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
+                    }
+                    loadStream(nextVideo.url);
+                    return;
+                }
+            }
+            
+            // Fallback: get related video if no search results available
             const currentUrl = currentVideoUrl;
             if (currentUrl) {
                 fetch(`/related?url=${encodeURIComponent(currentUrl)}`)
@@ -343,6 +501,8 @@ function setupEndedListener() {
                         if (data.videos && data.videos.length > 0) {
                             const nextVideo = data.videos[0];
                             currentVideoUrl = nextVideo.url;
+                            currentVideoTitle = nextVideo.title;
+                            updateNowPlayingTitle(nextVideo.title);
                             currentIndex = -1;
                             playlist = [nextVideo];
                             loadStream(nextVideo.url);
@@ -471,6 +631,7 @@ function loadMoreVideos() {
         const absoluteIndex = displayedVideosCount + relativeIndex;
         const item = document.createElement('div');
         item.className = 'result-item';
+        item.setAttribute('data-video-url', video.url);
         
         const title = document.createElement('h3');
         title.textContent = video.title;
@@ -496,8 +657,10 @@ function loadMoreVideos() {
             currentIndex = allSearchVideos.findIndex(v => v.url === video.url);
             if (currentIndex === -1) currentIndex = absoluteIndex;
             
-            searchResults.innerHTML = '';
+            // Keep search results visible - don't clear them
             currentVideoUrl = video.url;
+            currentVideoDuration = video.duration; // Store duration from search results
+            currentVideoTitle = video.title; // Store title
             
             // Update playlist with all search results
             playlist = allSearchVideos.map(v => ({
@@ -505,6 +668,17 @@ function loadMoreVideos() {
                 url: v.url,
                 duration: v.duration
             }));
+            
+            // Update now playing title
+            updateNowPlayingTitle(video.title);
+            
+            // Highlight the currently playing video
+            highlightCurrentVideo(video.url);
+            
+            // Update total time display immediately with duration from search results
+            if (currentVideoDuration && totalTimeDisplay) {
+                totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
+            }
             
             loadStream(video.url);
             
@@ -549,6 +723,38 @@ function loadMoreVideos() {
     }
 }
 
+// Update now playing title display
+function updateNowPlayingTitle(title) {
+    if (nowPlayingTitle) {
+        if (title) {
+            nowPlayingTitle.textContent = title;
+            nowPlayingTitle.style.display = 'block';
+        } else {
+            nowPlayingTitle.textContent = 'No track playing';
+        }
+    }
+}
+
+// Highlight the currently playing video in search results
+function highlightCurrentVideo(videoUrl) {
+    // Remove previous highlight
+    const allItems = searchResults.querySelectorAll('.result-item');
+    allItems.forEach(item => {
+        item.classList.remove('playing');
+    });
+    
+    // Add highlight to current video
+    allItems.forEach(item => {
+        const itemUrl = item.getAttribute('data-video-url');
+        if (itemUrl === videoUrl) {
+            item.classList.add('playing');
+            // Scroll into view if needed (only if not already visible)
+            setTimeout(() => {
+                item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 100);
+        }
+    });
+}
 
 // Update navigation button states
 function updateNavigationButtons() {
@@ -559,11 +765,23 @@ function updateNavigationButtons() {
         prevBtn.disabled = false;
     }
     
-    // Next button: always enable if there's a current video
-    // The next button gets related videos dynamically, not from playlist
-    // So it doesn't depend on playlist length or currentIndex
+    // Next button: enable if there's a current video and there's a next song available
     const hasCurrentVideo = currentVideoUrl && currentVideoUrl.length > 0;
-    nextBtn.disabled = !hasCurrentVideo;
+    let hasNextSong = false;
+    
+    // Check if there's a next song in playlist
+    if (playlist.length > 0 && currentIndex >= 0 && currentIndex < playlist.length - 1) {
+        hasNextSong = true;
+    } else if (allSearchVideos.length > 0 && currentVideoUrl) {
+        // Check if there's a next song in search results
+        const currentIndexInSearch = allSearchVideos.findIndex(v => v.url === currentVideoUrl);
+        if (currentIndexInSearch >= 0 && currentIndexInSearch < allSearchVideos.length - 1) {
+            hasNextSong = true;
+        }
+    }
+    
+    // Enable if we have a current video and either have a next song or can fetch related videos
+    nextBtn.disabled = !hasCurrentVideo || (!hasNextSong && playlist.length === 0 && allSearchVideos.length === 0);
     
     console.log('Navigation buttons updated:', {
         hasCurrentVideo,
@@ -618,8 +836,11 @@ if (progressBar) {
 
 // Update progress bar when duration is loaded
 audioPlayer.addEventListener('loadedmetadata', () => {
+    // Prefer actual duration from audio player, but fall back to stored duration
     if (audioPlayer.duration && !isNaN(audioPlayer.duration) && isFinite(audioPlayer.duration) && totalTimeDisplay) {
         totalTimeDisplay.textContent = formatTime(audioPlayer.duration);
+    } else if (currentVideoDuration && totalTimeDisplay) {
+        totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
     } else if (totalTimeDisplay) {
         totalTimeDisplay.textContent = '--:--';
     }
