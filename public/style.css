@@ -8,11 +8,83 @@ body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     min-height: 100vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 20px;
+    padding: 0;
+    margin: 0;
     color: #333;
+}
+
+.navbar {
+    background: white;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 15px 20px;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    width: 100%;
+}
+
+.navbar-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.navbar-brand h1 {
+    font-size: 1.5em;
+    color: #667eea;
+    margin: 0;
+    white-space: nowrap;
+}
+
+.navbar-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.navbar-search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 250px;
+    max-width: 400px;
+}
+
+.navbar-search input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 0.95em;
+    transition: border-color 0.3s ease;
+}
+
+.navbar-search input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.navbar-search .search-btn {
+    padding: 8px 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.95em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+}
+
+.navbar-search .search-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
 
 .container {
@@ -20,25 +92,11 @@ body {
     border-radius: 20px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     padding: 40px;
-    max-width: 800px;
+    max-width: 1200px;
     width: 100%;
+    margin: 20px auto;
 }
 
-header {
-    text-align: center;
-    margin-bottom: 30px;
-}
-
-header h1 {
-    font-size: 2.5em;
-    color: #667eea;
-    margin-bottom: 10px;
-}
-
-.subtitle {
-    color: #666;
-    font-size: 1.1em;
-}
 
 .player-container {
     background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
@@ -48,17 +106,9 @@ header h1 {
     text-align: center;
 }
 
-.controls {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 15px;
-    margin-bottom: 25px;
-}
-
 .control-btn {
-    width: 60px;
-    height: 60px;
+    width: 45px;
+    height: 45px;
     border-radius: 50%;
     border: none;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -68,12 +118,12 @@ header h1 {
     align-items: center;
     justify-content: center;
     transition: all 0.3s ease;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
 }
 
 .control-btn:hover {
     transform: scale(1.1);
-    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.6);
 }
 
 .control-btn:active {
@@ -81,8 +131,8 @@ header h1 {
 }
 
 .play-btn {
-    width: 70px;
-    height: 70px;
+    width: 50px;
+    height: 50px;
 }
 
 .prev-btn, .next-btn {
@@ -270,9 +320,36 @@ header h1 {
 }
 
 .search-results {
+    margin-top: 30px;
+    padding: 20px;
+}
+
+.load-more-container {
+    text-align: center;
     margin-top: 20px;
-    max-height: 400px;
-    overflow-y: auto;
+}
+
+.load-more-btn {
+    padding: 12px 30px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.load-more-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.load-more-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
 }
 
 .result-item {
@@ -335,5 +412,41 @@ header h1 {
 
 .search-results::-webkit-scrollbar-thumb:hover {
     background: #764ba2;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .navbar-content {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .navbar-brand {
+        text-align: center;
+    }
+    
+    .navbar-controls {
+        justify-content: center;
+    }
+    
+    .navbar-search {
+        max-width: 100%;
+    }
+    
+    .container {
+        margin: 10px;
+        padding: 20px;
+        border-radius: 15px;
+    }
+    
+    .control-btn {
+        width: 40px;
+        height: 40px;
+    }
+    
+    .play-btn {
+        width: 45px;
+        height: 45px;
+    }
 }
 

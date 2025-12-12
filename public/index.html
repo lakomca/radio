@@ -7,39 +7,47 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>🎵 Radio Stream</h1>
-            <p class="subtitle">Stream music from YouTube</p>
-        </header>
-
-        <div class="player-container">
-            <div class="controls">
+    <nav class="navbar">
+        <div class="navbar-content">
+            <div class="navbar-brand">
+                <h1>🎵 Radio Stream</h1>
+            </div>
+            
+            <div class="navbar-controls">
                 <button id="prevBtn" class="control-btn prev-btn" aria-label="Previous">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
                     </svg>
                 </button>
                 <button id="playPauseBtn" class="control-btn play-btn" aria-label="Play/Pause">
-                    <svg id="playIcon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <svg id="playIcon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M8 5v14l11-7z"/>
                     </svg>
-                    <svg id="pauseIcon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="display: none;">
+                    <svg id="pauseIcon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="display: none;">
                         <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
                     </svg>
                 </button>
                 <button id="nextBtn" class="control-btn next-btn" aria-label="Next">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
                     </svg>
                 </button>
                 <button id="stopBtn" class="control-btn stop-btn" aria-label="Stop">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M6 6h12v12H6z"/>
                     </svg>
                 </button>
             </div>
+            
+            <div class="navbar-search">
+                <input type="text" id="searchQuery" placeholder="Search for music..." />
+                <button id="searchBtn" class="search-btn">Search</button>
+            </div>
+        </div>
+    </nav>
 
+    <div class="container">
+        <div class="player-container">
             <div class="progress-container">
                 <div class="progress-info">
                     <span id="currentTime">0:00</span>
@@ -65,19 +73,12 @@
                 <input type="text" id="youtubeUrl" placeholder="https://www.youtube.com/watch?v=..." />
                 <button id="loadBtn" class="load-btn">Load & Play</button>
             </div>
-
-            <div class="search-section">
-                <div class="input-group">
-                    <label for="searchQuery">Search YouTube:</label>
-                    <input type="text" id="searchQuery" placeholder="Search for music..." />
-                    <button id="searchBtn" class="search-btn">Search</button>
-                </div>
-                <div id="searchResults" class="search-results"></div>
-            </div>
         </div>
 
-        <audio id="audioPlayer" preload="none"></audio>
+        <div id="searchResults" class="search-results"></div>
     </div>
+
+    <audio id="audioPlayer" preload="none"></audio>
 
     <script src="app.js"></script>
 </body>

@@ -27,7 +27,8 @@ let lastCurrentTime = 0;
 let streamStartTime = null; // Track when stream started
 let allSearchVideos = []; // Store all search results
 let displayedVideosCount = 0; // Track how many videos are currently displayed
-const VIDEOS_PER_BATCH = 20; // Number of videos to load per batch (always 20)
+const VIDEOS_PER_BATCH = 10; // Number of videos to load per batch
+let loadMoreBtn = null; // Reference to load more button
 
 // Set initial volume
 audioPlayer.volume = volumeSlider.value / 100;
@@ -503,9 +504,13 @@ async function searchYouTube(query) {
     searchResults.innerHTML = '<div class="loading">Searching...</div>';
     statusText.textContent = 'Searching...';
     
-    // Reset infinite scroll state
+    // Reset search state
     allSearchVideos = [];
     displayedVideosCount = 0;
+    if (loadMoreBtn) {
+        loadMoreBtn.remove();
+        loadMoreBtn = null;
+    }
     
     try {
         const response = await fetch(`/search?q=${encodeURIComponent(query)}`);
@@ -533,10 +538,7 @@ async function searchYouTube(query) {
         // Display first batch
         loadMoreVideos();
         
-        // Setup infinite scroll
-        setupInfiniteScroll();
-        
-        statusText.textContent = `Found ${data.videos.length} results - Scroll down for more`;
+        statusText.textContent = `Found ${data.videos.length} results`;
     } catch (error) {
         console.error('Search error:', error);
         searchResults.innerHTML = '<div class="error">Failed to search. Please try again.</div>';
@@ -544,9 +546,14 @@ async function searchYouTube(query) {
     }
 }
 
-// Load more videos (for infinite scroll)
+// Load more videos (with Load More button)
 function loadMoreVideos() {
     if (displayedVideosCount >= allSearchVideos.length) {
+        // Remove load more button if all videos are shown
+        if (loadMoreBtn) {
+            loadMoreBtn.remove();
+            loadMoreBtn = null;
+        }
         return; // All videos already displayed
     }
     
@@ -611,60 +618,30 @@ function loadMoreVideos() {
     
     updateNavigationButtons();
     
-    // Show loading indicator if there are more videos
+    // Remove existing load more button if any
+    if (loadMoreBtn) {
+        loadMoreBtn.remove();
+        loadMoreBtn = null;
+    }
+    
+    // Show Load More button if there are more videos
     if (displayedVideosCount < allSearchVideos.length) {
-        // Remove existing loading indicator if any
-        const existingLoader = searchResults.querySelector('.loading-more');
-        if (existingLoader) {
-            existingLoader.remove();
-        }
+        const container = document.createElement('div');
+        container.className = 'load-more-container';
         
-        const loader = document.createElement('div');
-        loader.className = 'loading-more';
-        loader.textContent = `Showing ${displayedVideosCount} of ${allSearchVideos.length} videos...`;
-        loader.style.textAlign = 'center';
-        loader.style.padding = '10px';
-        loader.style.color = '#666';
-        searchResults.appendChild(loader);
-    } else {
-        // Remove loading indicator if all videos are shown
-        const existingLoader = searchResults.querySelector('.loading-more');
-        if (existingLoader) {
-            existingLoader.remove();
-        }
-    }
-}
-
-// Setup infinite scroll
-let isLoadingMore = false;
-let scrollHandler = null;
-
-function setupInfiniteScroll() {
-    // Remove existing scroll listener if any
-    if (scrollHandler) {
-        searchResults.removeEventListener('scroll', scrollHandler);
-    }
-    
-    // Create new scroll handler
-    scrollHandler = () => {
-        const element = searchResults;
-        // Check if user scrolled near the bottom (within 200px)
-        const scrollBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+        loadMoreBtn = document.createElement('button');
+        loadMoreBtn.className = 'load-more-btn';
+        loadMoreBtn.textContent = `Load More (${displayedVideosCount} of ${allSearchVideos.length} shown)`;
         
-        if (scrollBottom < 200 && !isLoadingMore && displayedVideosCount < allSearchVideos.length) {
-            console.log(`Scroll detected: ${scrollBottom}px from bottom, loading more videos...`);
-            isLoadingMore = true;
+        loadMoreBtn.addEventListener('click', () => {
             loadMoreVideos();
-            // Reset loading flag after videos are loaded
-            setTimeout(() => {
-                isLoadingMore = false;
-            }, 300);
-        }
-    };
-    
-    // Add scroll listener
-    searchResults.addEventListener('scroll', scrollHandler);
+        });
+        
+        container.appendChild(loadMoreBtn);
+        searchResults.appendChild(container);
+    }
 }
+
 
 // Update navigation button states
 function updateNavigationButtons() {
