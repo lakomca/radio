@@ -98,7 +98,7 @@ function searchYouTube(query) {
         const commands = [
             { 
                 cmd: 'yt-dlp', 
-                args: [`ytsearch999:${query}`, '--flat-playlist', '--print', '%(id)s|%(title)s|%(duration)s'],
+                args: [`ytsearch50:${query}`, '--flat-playlist', '--print', '%(id)s|%(title)s|%(duration)s'],
                 parser: (output) => {
                     return output.trim().split('\n')
                         .filter(line => line.trim())
@@ -117,7 +117,7 @@ function searchYouTube(query) {
             },
             { 
                 cmd: 'yt-dlp.exe', 
-                args: [`ytsearch999:${query}`, '--flat-playlist', '--print', '%(id)s|%(title)s|%(duration)s'],
+                args: [`ytsearch50:${query}`, '--flat-playlist', '--print', '%(id)s|%(title)s|%(duration)s'],
                 parser: (output) => {
                     return output.trim().split('\n')
                         .filter(line => line.trim())
@@ -136,7 +136,7 @@ function searchYouTube(query) {
             },
             { 
                 cmd: 'youtube-dl', 
-                args: [`ytsearch999:${query}`, '--flat-playlist', '--get-id', '--get-title', '--get-duration'],
+                args: [`ytsearch50:${query}`, '--flat-playlist', '--get-id', '--get-title', '--get-duration'],
                 parser: (output) => {
                     const lines = output.trim().split('\n');
                     const videos = [];
@@ -155,7 +155,7 @@ function searchYouTube(query) {
             },
             { 
                 cmd: 'youtube-dl.exe', 
-                args: [`ytsearch999:${query}`, '--flat-playlist', '--get-id', '--get-title', '--get-duration'],
+                args: [`ytsearch50:${query}`, '--flat-playlist', '--get-id', '--get-title', '--get-duration'],
                 parser: (output) => {
                     const lines = output.trim().split('\n');
                     const videos = [];

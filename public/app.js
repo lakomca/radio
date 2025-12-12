@@ -445,7 +445,7 @@ function loadStream(youtubeUrl) {
     
     audioPlayer.addEventListener('loadedmetadata', () => {
         console.log('✅ Audio metadata loaded');
-        isLoading = false;
+        // Don't set isLoading = false here - let canplay handler do it after playback starts
         playPauseBtn.disabled = false;
         updateNavigationButtons();
         // Ensure time display is reset when new stream loads
@@ -496,11 +496,17 @@ function loadStream(youtubeUrl) {
             
             audioPlayer.play().then(() => {
                 console.log('✅ Audio play started');
+                isLoading = false; // Mark as loaded after successful play
                 updatePlayPauseButton(true);
             }).catch(err => {
                 console.error('❌ Play error:', err);
+                isLoading = false; // Mark as loaded even on error
                 isHandlingEnded = false;
             });
+        } else {
+            // If isLoading is false but canplay fires, it might be buffering recovery
+            // Don't interfere - let browser handle it
+            console.log('▶️ Audio can play (buffering recovery)');
         }
     };
     audioPlayer.addEventListener('canplay', canplayHandler, { once: true });
@@ -766,7 +772,19 @@ async function searchYouTube(query) {
     }
     
     try {
-        const response = await fetch(`/search?q=${encodeURIComponent(query)}`);
+        // Add timeout to fetch request (25 seconds - backend has 30s timeout)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 25000);
+        
+        const response = await fetch(`/search?q=${encodeURIComponent(query)}`, {
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            throw new Error(`Search failed: ${response.status} ${response.statusText}`);
+        }
+        
         const data = await response.json();
         
         if (data.error) {
@@ -790,7 +808,11 @@ async function searchYouTube(query) {
         loadMoreVideos();
     } catch (error) {
         console.error('Search error:', error);
-        searchResults.innerHTML = '<div class="error">Failed to search. Please try again.</div>';
+        if (error.name === 'AbortError') {
+            searchResults.innerHTML = '<div class="error">Search timed out. The server may be slow. Please try again.</div>';
+        } else {
+            searchResults.innerHTML = '<div class="error">Failed to search. Please try again.</div>';
+        }
     }
 }
 
