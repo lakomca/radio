@@ -6,7 +6,6 @@ const stopBtn = document.getElementById('stopBtn');
 const repeatBtn = document.getElementById('repeatBtn');
 const autoplayBtn = document.getElementById('autoplayBtn');
 const volumeSlider = document.getElementById('volumeSlider');
-const volumeValue = document.getElementById('volumeValue');
 const searchQueryInput = document.getElementById('searchQuery');
 const searchBtn = document.getElementById('searchBtn');
 const searchResults = document.getElementById('searchResults');
@@ -41,7 +40,6 @@ let repeatMode = 0; // 0 = off, 1 = repeat all, 2 = repeat one
 
 // Set initial volume
 audioPlayer.volume = volumeSlider.value / 100;
-volumeValue.textContent = `${volumeSlider.value}%`;
 
 // ===== GLOBAL EVENT LISTENERS (set up once, not in loadStream) =====
 
@@ -269,7 +267,53 @@ stopBtn.addEventListener('click', () => {
 volumeSlider.addEventListener('input', (e) => {
     const volume = e.target.value;
     audioPlayer.volume = volume / 100;
-    volumeValue.textContent = `${volume}%`;
+});
+
+// Repeat button functionality - only changes mode, doesn't trigger immediate repeat
+// Actual repeating happens in the ended event handler when song finishes
+repeatBtn.addEventListener('click', () => {
+    repeatMode = (repeatMode + 1) % 3; // Cycle: 0 -> 1 -> 2 -> 0
+    
+    if (repeatMode === 0) {
+        // Off
+        repeatBtn.classList.remove('active');
+        repeatIcon.style.display = 'block';
+        repeatOneIcon.style.display = 'none';
+        repeatBtn.title = 'Repeat: OFF';
+    } else if (repeatMode === 1) {
+        // Repeat all
+        repeatBtn.classList.add('active');
+        repeatIcon.style.display = 'block';
+        repeatOneIcon.style.display = 'none';
+        repeatBtn.title = 'Repeat: ALL';
+    } else {
+        // Repeat one
+        repeatBtn.classList.add('active');
+        repeatIcon.style.display = 'none';
+        repeatOneIcon.style.display = 'block';
+        repeatBtn.title = 'Repeat: ONE';
+    }
+    
+    console.log('Repeat mode changed to:', repeatMode === 0 ? 'OFF' : (repeatMode === 1 ? 'ALL' : 'ONE'));
+});
+
+// Autoplay button functionality
+autoplayBtn.addEventListener('click', () => {
+    autoplayEnabled = !autoplayEnabled;
+    
+    if (autoplayEnabled) {
+        autoplayBtn.classList.add('active');
+        autoplayBtn.classList.remove('inactive');
+        autoplayOnIcon.style.display = 'block';
+        autoplayOffIcon.style.display = 'none';
+        autoplayBtn.title = 'Autoplay: ON';
+    } else {
+        autoplayBtn.classList.remove('active');
+        autoplayBtn.classList.add('inactive');
+        autoplayOnIcon.style.display = 'none';
+        autoplayOffIcon.style.display = 'block';
+        autoplayBtn.title = 'Autoplay: OFF';
+    }
 });
 
 
