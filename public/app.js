@@ -582,7 +582,26 @@ function setupEndedListener() {
                     return;
             }
             
-            // First try to play next from search results
+            // First try to play next from playlist (search results)
+            // Ensure playlist is up to date with allSearchVideos if available
+            if (allSearchVideos.length > 0 && playlist.length !== allSearchVideos.length) {
+                playlist = allSearchVideos.map(v => ({
+                    title: v.title,
+                    url: v.url,
+                    duration: v.duration,
+                    id: v.id || getVideoIdFromUrl(v.url)
+                }));
+            }
+            
+            // Update currentIndex if needed (in case playlist was updated)
+            if (playlist.length > 0 && currentVideoUrl) {
+                const indexInPlaylist = playlist.findIndex(v => v.url === currentVideoUrl);
+                if (indexInPlaylist >= 0) {
+                    currentIndex = indexInPlaylist;
+                }
+            }
+            
+            // Play next from playlist (search results)
             if (playlist.length > 0 && currentIndex >= 0 && currentIndex < playlist.length - 1) {
                 currentIndex++;
                 const nextVideo = playlist[currentIndex];
@@ -596,40 +615,34 @@ function setupEndedListener() {
                 if (currentVideoDuration && totalTimeDisplay) {
                     totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
                 }
-                    loadStream(nextVideo.url);
-                    // Flag will be reset when new stream starts playing
-                    return;
+                loadStream(nextVideo.url);
+                // Flag will be reset when new stream starts playing
+                return;
+            } else if (repeatMode === 1 && playlist.length > 0 && currentIndex === playlist.length - 1) {
+                // Loop back to start if repeat all mode and at end of playlist
+                currentIndex = 0;
+                const nextVideo = playlist[currentIndex];
+                currentVideoUrl = nextVideo.url;
+                currentVideoDuration = nextVideo.duration;
+                currentVideoTitle = nextVideo.title;
+                currentVideoId = nextVideo.id || getVideoIdFromUrl(nextVideo.url);
+                updateVideoThumbnail(currentVideoId);
+                updateNowPlayingTitle(nextVideo.title);
+                highlightCurrentVideo(nextVideo.url);
+                if (currentVideoDuration && totalTimeDisplay) {
+                    totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
+                }
+                loadStream(nextVideo.url);
+                // Flag will be reset when new stream starts playing
+                return;
             }
             
-            // Try from allSearchVideos if available
-            if (allSearchVideos.length > 0 && currentVideoUrl) {
+            // Fallback: Try from allSearchVideos if playlist is empty but search results exist
+            if (playlist.length === 0 && allSearchVideos.length > 0 && currentVideoUrl) {
                 const currentIndexInSearch = allSearchVideos.findIndex(v => v.url === currentVideoUrl);
                 if (currentIndexInSearch >= 0 && currentIndexInSearch < allSearchVideos.length - 1) {
                     const nextVideo = allSearchVideos[currentIndexInSearch + 1];
                     currentIndex = currentIndexInSearch + 1;
-                    currentVideoUrl = nextVideo.url;
-                    currentVideoDuration = nextVideo.duration;
-                    currentVideoTitle = nextVideo.title;
-                    currentVideoId = nextVideo.id || getVideoIdFromUrl(nextVideo.url);
-                    updateVideoThumbnail(currentVideoId);
-                    updateNowPlayingTitle(nextVideo.title);
-                    playlist = allSearchVideos.map(v => ({
-                        title: v.title,
-                        url: v.url,
-                        duration: v.duration,
-                        id: v.id || getVideoIdFromUrl(v.url)
-                    }));
-                    highlightCurrentVideo(nextVideo.url);
-                    if (currentVideoDuration && totalTimeDisplay) {
-                        totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
-                    }
-                    loadStream(nextVideo.url);
-                    // Flag will be reset when new stream starts playing
-                    return;
-                } else if (repeatMode === 1 && currentIndexInSearch === allSearchVideos.length - 1) {
-                    // Loop back to start if repeat all
-                    const nextVideo = allSearchVideos[0];
-                    currentIndex = 0;
                     currentVideoUrl = nextVideo.url;
                     currentVideoDuration = nextVideo.duration;
                     currentVideoTitle = nextVideo.title;

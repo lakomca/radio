@@ -161,6 +161,7 @@ body {
     height: 100%;
     background: #1a2a2f;
     border-radius: 2px;
+    z-index: 1;
 }
 
 .progress-fill {
@@ -169,10 +170,11 @@ body {
     left: 0;
     height: 100%;
     width: 0%;
-    background: linear-gradient(90deg, #00d9ff 0%, #ffaa33 50%, #ff8800 100%);
+    background: linear-gradient(to right, #00d9ff 0%, #ffaa33 50%, #ff8800 100%);
     border-radius: 2px;
     transition: width 0.1s linear;
     box-shadow: 0 0 8px rgba(0, 217, 255, 0.3);
+    z-index: 2;
 }
 
 .progress-thumb {
@@ -188,6 +190,7 @@ body {
     transition: all 0.2s ease;
     box-shadow: 0 0 8px rgba(0, 217, 255, 0.5);
     opacity: 0;
+    z-index: 3;
 }
 
 .custom-progress-bar:hover .progress-thumb,
