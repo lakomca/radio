@@ -49,14 +49,16 @@ body {
 
 .video-thumbnail {
     flex-shrink: 0;
-    width: 60px;
-    height: 45px;
-    border-radius: 6px;
+    width: 120px;
+    height: 90px;
+    border-radius: 8px;
     overflow: hidden;
     background: #1a2a2f;
     display: flex;
     align-items: center;
     justify-content: center;
+    border: 2px solid #2a3a3f;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .video-thumbnail img {
@@ -67,9 +69,9 @@ body {
 
 .video-thumbnail .thumbnail-placeholder {
     color: #88aabb;
-    font-size: 0.7em;
+    font-size: 0.85em;
     text-align: center;
-    padding: 5px;
+    padding: 10px;
 }
 
 .navbar-brand h1 {
@@ -569,6 +571,16 @@ body {
     
     .player-section {
         padding-top: 10px;
+    }
+    
+    .player-header {
+        gap: 15px;
+        margin-bottom: 12px;
+    }
+    
+    .video-thumbnail {
+        width: 80px;
+        height: 60px;
     }
     
     .player-controls-row {
