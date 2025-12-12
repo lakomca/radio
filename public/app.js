@@ -124,17 +124,27 @@ audioPlayer.addEventListener('progress', () => {
 // Handle stalled events - this happens during normal buffering
 audioPlayer.addEventListener('stalled', () => {
     console.log('⚠️ Stream stalled - waiting for data');
+    const buffered = audioPlayer.buffered;
+    const bufferedTime = buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
+    console.log(`  Current readyState: ${audioPlayer.readyState}, buffered: ${bufferedTime.toFixed(2)}s`);
+    
     // Don't reload or restart - let browser handle buffering naturally
     // But if we're still loading and have some data, try to play
-    if (isLoading && audioPlayer.readyState >= 2) {
+    if (isLoading && (audioPlayer.readyState >= 1 || bufferedTime > 0)) {
         setTimeout(() => {
-            if (isLoading && audioPlayer.readyState >= 2) {
-                console.log('Attempting to play after stall - readyState:', audioPlayer.readyState);
-                audioPlayer.play().catch(err => {
-                    console.error('Play failed after stall:', err);
+            if (isLoading && audioPlayer.paused) {
+                const newBuffered = audioPlayer.buffered;
+                const newBufferedTime = newBuffered.length > 0 ? newBuffered.end(newBuffered.length - 1) : 0;
+                console.log(`Attempting to play after stall - readyState: ${audioPlayer.readyState}, buffered: ${newBufferedTime.toFixed(2)}s`);
+                audioPlayer.play().then(() => {
+                    console.log('✅ Playback resumed after stall');
+                    isLoading = false;
+                    updatePlayPauseButton(true);
+                }).catch(err => {
+                    console.error('Play failed after stall:', err.message);
                 });
             }
-        }, 2000);
+        }, 1000); // Shorter delay - try sooner
     }
 });
 
@@ -467,29 +477,33 @@ function loadStream(youtubeUrl) {
         hasReceivedData = false;
         cleanupProgressCheck(); // Clear any existing interval
         
-        // Start checking for data progress every 2 seconds
+        // Start checking for data progress every 1 second (more frequent)
         progressCheckInterval = setInterval(() => {
             if (isLoading) {
                 const buffered = audioPlayer.buffered;
-                if (buffered.length > 0) {
-                    const bufferedEnd = buffered.end(buffered.length - 1);
-                    if (bufferedEnd > 0) {
-                        hasReceivedData = true;
-                        console.log(`📊 Data received: buffered ${bufferedEnd.toFixed(2)}s, readyState: ${audioPlayer.readyState}`);
-                        
-                        // If we have data and readyState allows, try to play
-                        if (audioPlayer.readyState >= 2 && audioPlayer.paused) {
-                            console.log('Attempting playback with buffered data');
-                            audioPlayer.play().then(() => {
-                                console.log('✅ Audio play started via progress check');
-                                isLoading = false;
-                                updatePlayPauseButton(true);
-                                cleanupProgressCheck();
-                            }).catch(err => {
-                                console.error('❌ Play error in progress check:', err);
-                            });
-                        }
+                const bufferedEnd = buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
+                
+                if (bufferedEnd > 0) {
+                    hasReceivedData = true;
+                    console.log(`📊 Data received: buffered ${bufferedEnd.toFixed(2)}s, readyState: ${audioPlayer.readyState}`);
+                    
+                    // If we have ANY buffered data and readyState >= 1, try to play
+                    // This is more aggressive - we try as soon as we have metadata and some data
+                    if (audioPlayer.readyState >= 1 && audioPlayer.paused) {
+                        console.log('Attempting playback with buffered data (readyState >= 1)');
+                        audioPlayer.play().then(() => {
+                            console.log('✅ Audio play started via progress check');
+                            isLoading = false;
+                            updatePlayPauseButton(true);
+                            cleanupProgressCheck();
+                        }).catch(err => {
+                            console.error('❌ Play error in progress check:', err.message);
+                            // Don't give up yet - might just need more buffering
+                        });
                     }
+                } else if (audioPlayer.readyState >= 1) {
+                    // We have metadata but no buffered data yet - log but don't play yet
+                    console.log(`⏳ Have metadata (readyState: ${audioPlayer.readyState}) but no buffered data yet...`);
                 } else {
                     console.log(`⏳ Still waiting for data... readyState: ${audioPlayer.readyState}`);
                 }
@@ -497,7 +511,7 @@ function loadStream(youtubeUrl) {
                 // Stop checking if we're no longer loading
                 cleanupProgressCheck();
             }
-        }, 2000);
+        }, 1000); // Check every 1 second instead of 2
     }, { once: true });
     
     audioPlayer.addEventListener('loadedmetadata', () => {
@@ -515,17 +529,19 @@ function loadStream(youtubeUrl) {
         console.log('✅ Audio data loaded, readyState:', audioPlayer.readyState);
         hasReceivedData = true;
         // If canplay hasn't fired yet and we're loading, try to play
-        if (isLoading && audioPlayer.readyState >= 3) {
-            console.log('loadeddata: Attempting to start playback (readyState >= 3)');
+        // Try with readyState >= 1 (HAVE_METADATA) - more aggressive
+        if (isLoading && audioPlayer.readyState >= 1) {
+            console.log('loadeddata: Attempting to start playback (readyState >= 1)');
             setTimeout(() => {
-                if (isLoading && audioPlayer.readyState >= 3 && audioPlayer.paused) {
+                if (isLoading && audioPlayer.readyState >= 1 && audioPlayer.paused) {
                     audioPlayer.play().then(() => {
                         console.log('✅ Audio play started via loadeddata');
                         isLoading = false;
                         updatePlayPauseButton(true);
                         cleanupProgressCheck();
                     }).catch(err => {
-                        console.error('❌ Play error in loadeddata:', err);
+                        console.error('❌ Play error in loadeddata:', err.message);
+                        // Don't give up - might just need more buffering
                     });
                 }
             }, 300);
@@ -574,24 +590,41 @@ function loadStream(youtubeUrl) {
     ];
     
     timeoutChecks.forEach(({ time, message }) => {
-    setTimeout(() => {
-        if (isLoading) {
-                console.warn(`⏱️ ${message} - readyState: ${audioPlayer.readyState}, buffered: ${audioPlayer.buffered.length > 0 ? audioPlayer.buffered.end(audioPlayer.buffered.length - 1).toFixed(2) + 's' : 'none'}`);
-                if (audioPlayer.readyState >= 2 || hasReceivedData) {
-                    // HAVE_CURRENT_DATA (2) or more - we have some data, try to play
-                    console.log(`Attempting to play - readyState: ${audioPlayer.readyState}, hasReceivedData: ${hasReceivedData}`);
+        setTimeout(() => {
+            if (isLoading) {
+                const buffered = audioPlayer.buffered;
+                const bufferedTime = buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
+                console.warn(`⏱️ ${message} - checking if we can play anyway`);
+                console.warn(`  readyState: ${audioPlayer.readyState}, buffered: ${bufferedTime.toFixed(2)}s, hasReceivedData: ${hasReceivedData}`);
+                
+                // Try to play if we have ANY buffered data OR if readyState >= 1 (HAVE_METADATA)
+                // This is more aggressive - we try even with minimal data
+                if (audioPlayer.readyState >= 1 || bufferedTime > 0 || hasReceivedData) {
+                    console.log(`⏱️ ${message} - Attempting to play - readyState: ${audioPlayer.readyState}, buffered: ${bufferedTime.toFixed(2)}s`);
                     audioPlayer.play().then(() => {
                         console.log(`✅ Audio play started after ${message}`);
                         isLoading = false;
                         updatePlayPauseButton(true);
                         cleanupProgressCheck();
                     }).catch(err => {
-                        console.error(`❌ Play failed after ${message}:`, err);
-                        // Don't reset isLoading on first few attempts - might just need more time
+                        console.error(`❌ Play failed after ${message}:`, err.message);
+                        // Only give up on later timeouts (15s+)
                         if (time >= 15000) {
+                            console.warn(`⏱️ ${message} - no data available, resetting loading flag`);
                             isLoading = false;
+                            playPauseBtn.disabled = false;
+                            updatePlayPauseButton(false);
                         }
                     });
+                } else {
+                    // No data yet, but only give up on longer timeouts
+                    if (time >= 15000) {
+                        console.warn(`⏱️ ${message} - no data available, resetting loading flag`);
+                        isLoading = false;
+                        playPauseBtn.disabled = false;
+                        updatePlayPauseButton(false);
+                        cleanupProgressCheck();
+                    }
                 }
             }
         }, time);
