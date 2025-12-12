@@ -121,11 +121,21 @@ audioPlayer.addEventListener('progress', () => {
     }
 });
 
-// Handle stalled events
+// Handle stalled events - this happens during normal buffering
 audioPlayer.addEventListener('stalled', () => {
     console.log('⚠️ Stream stalled - waiting for data');
     // Don't reload or restart - let browser handle buffering naturally
-    // The stream should resume automatically when data is available
+    // But if we're still loading and have some data, try to play
+    if (isLoading && audioPlayer.readyState >= 2) {
+        setTimeout(() => {
+            if (isLoading && audioPlayer.readyState >= 2) {
+                console.log('Attempting to play after stall - readyState:', audioPlayer.readyState);
+                audioPlayer.play().catch(err => {
+                    console.error('Play failed after stall:', err);
+                });
+            }
+        }, 2000);
+    }
 });
 
 // Handle waiting events
@@ -435,6 +445,7 @@ function loadStream(youtubeUrl) {
     setTimeout(() => {
         console.log('Setting new audio source:', streamUrl);
         audioPlayer.src = streamUrl;
+        audioPlayer.preload = 'auto';
         audioPlayer.load();
     }, 100);
     
@@ -456,6 +467,21 @@ function loadStream(youtubeUrl) {
     
     audioPlayer.addEventListener('loadeddata', () => {
         console.log('✅ Audio data loaded');
+        // If canplay hasn't fired yet and we're loading, try to play
+        if (isLoading && audioPlayer.readyState >= 3) {
+            console.log('loadeddata: Attempting to start playback (readyState >= 3)');
+            setTimeout(() => {
+                if (isLoading && audioPlayer.readyState >= 3) {
+                    audioPlayer.play().then(() => {
+                        console.log('✅ Audio play started via loadeddata');
+                        isLoading = false;
+                        updatePlayPauseButton(true);
+                    }).catch(err => {
+                        console.error('❌ Play error in loadeddata:', err);
+                    });
+                }
+            }, 500);
+        }
     }, { once: true });
     
     // Handle errors
@@ -464,17 +490,43 @@ function loadStream(youtubeUrl) {
         console.error('❌ Audio error:', e);
         console.error('Error code:', audioPlayer.error?.code);
         console.error('Error message:', audioPlayer.error?.message);
+        console.error('Error name:', audioPlayer.error?.name);
         console.trace('Error occurred at:');
         
         playPauseBtn.disabled = false;
         updatePlayPauseButton(false);
+        
+        // Try to get more details about the error
+        if (audioPlayer.error) {
+            const errorMessages = {
+                1: 'MEDIA_ERR_ABORTED - The user aborted the loading',
+                2: 'MEDIA_ERR_NETWORK - A network error caused the download to fail',
+                3: 'MEDIA_ERR_DECODE - The decoding of the media failed',
+                4: 'MEDIA_ERR_SRC_NOT_SUPPORTED - The media could not be loaded'
+            };
+            console.error('Error details:', errorMessages[audioPlayer.error.code] || 'Unknown error');
+        }
     }, { once: true });
     
-    // Timeout fallback
+    // Timeout fallback - try to play if we have some data
     setTimeout(() => {
         if (isLoading) {
-            console.warn('⏱️ Load timeout - resetting loading flag');
-            isLoading = false;
+            console.warn('⏱️ Load timeout - checking if we can play anyway');
+            if (audioPlayer.readyState >= 2) {
+                // HAVE_CURRENT_DATA (2) or more - we have some data, try to play
+                console.log('ReadyState is', audioPlayer.readyState, '- attempting to play');
+                audioPlayer.play().then(() => {
+                    console.log('✅ Audio play started after timeout');
+                    isLoading = false;
+                    updatePlayPauseButton(true);
+                }).catch(err => {
+                    console.error('❌ Play failed after timeout:', err);
+                    isLoading = false;
+                });
+            } else {
+                console.warn('⏱️ Load timeout - no data available, resetting loading flag');
+                isLoading = false;
+            }
         }
     }, 30000);
     
