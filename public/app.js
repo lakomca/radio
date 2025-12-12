@@ -40,7 +40,7 @@ audioPlayer.addEventListener('timeupdate', () => {
     const duration = audioPlayer.duration;
     
     // Update progress bar
-    if (duration && !isNaN(duration) && duration > 0) {
+    if (duration && !isNaN(duration) && isFinite(duration) && duration > 0) {
         const progress = (currentTime / duration) * 100;
         progressBar.value = progress;
         currentTimeDisplay.textContent = formatTime(currentTime);
@@ -395,7 +395,7 @@ searchQueryInput.addEventListener('keypress', (e) => {
 // Create skeleton screen for search results
 function createSkeletonScreen() {
     searchResults.innerHTML = '';
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 9; i++) {
         const skeletonItem = document.createElement('div');
         skeletonItem.className = 'skeleton-item';
         skeletonItem.innerHTML = `
@@ -457,6 +457,11 @@ function loadMoreVideos() {
             loadMoreBtn = null;
         }
         return; // All videos already displayed
+    }
+    
+    // Clear skeleton screen before adding videos
+    if (displayedVideosCount === 0) {
+        searchResults.innerHTML = '';
     }
     
     const endIndex = Math.min(displayedVideosCount + VIDEOS_PER_BATCH, allSearchVideos.length);
@@ -580,7 +585,7 @@ function formatDuration(seconds) {
 
 // Format time for progress display (seconds to MM:SS or HH:MM:SS)
 function formatTime(seconds) {
-    if (!seconds || isNaN(seconds) || seconds < 0) return '0:00';
+    if (!seconds || isNaN(seconds) || !isFinite(seconds) || seconds < 0) return '0:00';
     const sec = Math.floor(seconds);
     const hours = Math.floor(sec / 3600);
     const mins = Math.floor((sec % 3600) / 60);
@@ -600,7 +605,7 @@ if (progressBar) {
     });
 
     progressBar.addEventListener('change', () => {
-        if (audioPlayer.duration && !isNaN(audioPlayer.duration)) {
+        if (audioPlayer.duration && !isNaN(audioPlayer.duration) && isFinite(audioPlayer.duration)) {
             const seekTime = (progressBar.value / 100) * audioPlayer.duration;
             audioPlayer.currentTime = seekTime;
             if (currentTimeDisplay) {
@@ -613,8 +618,10 @@ if (progressBar) {
 
 // Update progress bar when duration is loaded
 audioPlayer.addEventListener('loadedmetadata', () => {
-    if (audioPlayer.duration && !isNaN(audioPlayer.duration) && totalTimeDisplay) {
+    if (audioPlayer.duration && !isNaN(audioPlayer.duration) && isFinite(audioPlayer.duration) && totalTimeDisplay) {
         totalTimeDisplay.textContent = formatTime(audioPlayer.duration);
+    } else if (totalTimeDisplay) {
+        totalTimeDisplay.textContent = '--:--';
     }
 });
 
@@ -644,3 +651,4 @@ audioPlayer.addEventListener('pause', () => {
 
 // Set up ended listener initially
 setupEndedListener();
+
