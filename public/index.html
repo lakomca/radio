@@ -13,6 +13,16 @@
                 <h1>🎵 Radio Stream</h1>
             </div>
             
+            <div class="navbar-progress-section">
+                <div class="progress-container">
+                    <div class="progress-info">
+                        <span id="currentTime">0:00</span>
+                        <span id="totalTime">0:00</span>
+                    </div>
+                    <input type="range" id="progressBar" min="0" max="100" value="0" step="0.1">
+                </div>
+            </div>
+            
             <div class="navbar-controls">
                 <button id="prevBtn" class="control-btn prev-btn" aria-label="Previous">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -39,6 +49,14 @@
                 </button>
             </div>
             
+            <div class="navbar-volume">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="opacity: 0.7;">
+                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                </svg>
+                <input type="range" id="volumeSlider" min="0" max="100" value="70">
+                <span id="volumeValue">70%</span>
+            </div>
+            
             <div class="navbar-search">
                 <input type="text" id="searchQuery" placeholder="Search for music..." />
                 <button id="searchBtn" class="search-btn">Search</button>
@@ -47,34 +65,6 @@
     </nav>
 
     <div class="container">
-        <div class="player-container">
-            <div class="progress-container">
-                <div class="progress-info">
-                    <span id="currentTime">0:00</span>
-                    <span id="totalTime">0:00</span>
-                </div>
-                <input type="range" id="progressBar" min="0" max="100" value="0" step="0.1">
-            </div>
-
-            <div class="volume-control">
-                <label for="volumeSlider">Volume:</label>
-                <input type="range" id="volumeSlider" min="0" max="100" value="70">
-                <span id="volumeValue">70%</span>
-            </div>
-
-            <div class="status">
-                <p id="statusText">Ready to play</p>
-            </div>
-        </div>
-
-        <div class="input-section">
-            <div class="input-group">
-                <label for="youtubeUrl">YouTube URL:</label>
-                <input type="text" id="youtubeUrl" placeholder="https://www.youtube.com/watch?v=..." />
-                <button id="loadBtn" class="load-btn">Load & Play</button>
-            </div>
-        </div>
-
         <div id="searchResults" class="search-results"></div>
     </div>
 

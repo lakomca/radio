@@ -5,9 +5,6 @@ const nextBtn = document.getElementById('nextBtn');
 const stopBtn = document.getElementById('stopBtn');
 const volumeSlider = document.getElementById('volumeSlider');
 const volumeValue = document.getElementById('volumeValue');
-const statusText = document.getElementById('statusText');
-const youtubeUrlInput = document.getElementById('youtubeUrl');
-const loadBtn = document.getElementById('loadBtn');
 const searchQueryInput = document.getElementById('searchQuery');
 const searchBtn = document.getElementById('searchBtn');
 const searchResults = document.getElementById('searchResults');
@@ -18,6 +15,7 @@ const currentTimeDisplay = document.getElementById('currentTime');
 const totalTimeDisplay = document.getElementById('totalTime');
 
 let currentStreamUrl = null;
+let currentVideoUrl = null; // Track current video URL (replaces youtubeUrlInput)
 let isLoading = false;
 let playlist = []; // Array to store playlist
 let currentIndex = -1; // Current song index in playlist
@@ -76,19 +74,9 @@ audioPlayer.addEventListener('progress', () => {
                 isBuffering = true;
                 console.log('📊 Buffering started - buffer ahead:', bufferedAhead.toFixed(2), 'seconds');
             }
-            if (currentIndex >= 0 && playlist[currentIndex]) {
-                statusText.textContent = `Buffering: ${playlist[currentIndex].title}`;
-            } else {
-                statusText.textContent = 'Buffering...';
-            }
         } else if (isBuffering && bufferedAhead > 5) {
             isBuffering = false;
             console.log('✅ Buffering complete - buffer ahead:', bufferedAhead.toFixed(2), 'seconds');
-            if (currentIndex >= 0 && playlist[currentIndex]) {
-                statusText.textContent = `Playing: ${playlist[currentIndex].title}`;
-            } else {
-                statusText.textContent = 'Playing...';
-            }
         }
     }
 });
@@ -96,25 +84,11 @@ audioPlayer.addEventListener('progress', () => {
 // Handle stalled events
 audioPlayer.addEventListener('stalled', () => {
     console.log('⚠️ Stream stalled - waiting for data');
-    if (!audioPlayer.paused) {
-        if (currentIndex >= 0 && playlist[currentIndex]) {
-            statusText.textContent = `Buffering: ${playlist[currentIndex].title}`;
-        } else {
-            statusText.textContent = 'Buffering...';
-        }
-    }
 });
 
 // Handle waiting events
 audioPlayer.addEventListener('waiting', () => {
     console.log('⏳ Stream waiting for data');
-    if (!audioPlayer.paused) {
-        if (currentIndex >= 0 && playlist[currentIndex]) {
-            statusText.textContent = `Buffering: ${playlist[currentIndex].title}`;
-        } else {
-            statusText.textContent = 'Buffering...';
-        }
-    }
 });
 
 // Handle suspend events
@@ -151,48 +125,39 @@ audioPlayer.load = function() {
 playPauseBtn.addEventListener('click', () => {
     if (audioPlayer.paused) {
         if (!currentStreamUrl) {
-            statusText.textContent = 'Please load a YouTube URL first';
             return;
         }
         audioPlayer.play();
         updatePlayPauseButton(true);
-        statusText.textContent = 'Playing...';
     } else {
         audioPlayer.pause();
         updatePlayPauseButton(false);
-        statusText.textContent = 'Paused';
     }
 });
 
 // Previous button functionality
 prevBtn.addEventListener('click', () => {
     if (playlist.length === 0) {
-        statusText.textContent = 'No playlist available';
         return;
     }
     
     if (currentIndex > 0) {
         currentIndex--;
         loadStream(playlist[currentIndex].url);
-        statusText.textContent = `Playing: ${playlist[currentIndex].title}`;
-    } else {
-        statusText.textContent = 'Already at first song';
     }
 });
 
 // Next button functionality - get next recommended video like YouTube
 nextBtn.addEventListener('click', async () => {
     // Get current YouTube URL
-    const currentUrl = youtubeUrlInput.value.trim();
+    const currentUrl = currentVideoUrl;
     
     if (!currentUrl) {
-        statusText.textContent = 'No video playing';
         return;
     }
     
     // Disable button while loading
     nextBtn.disabled = true;
-    statusText.textContent = 'Loading next recommended video...';
     
     try {
         // Fetch related videos
@@ -200,24 +165,21 @@ nextBtn.addEventListener('click', async () => {
         const data = await response.json();
         
         if (data.error || !data.videos || data.videos.length === 0) {
-            statusText.textContent = 'No related videos found';
             nextBtn.disabled = false;
             return;
         }
         
         // Play the first recommended video
         const nextVideo = data.videos[0];
-        youtubeUrlInput.value = nextVideo.url;
+        currentVideoUrl = nextVideo.url;
         currentIndex = -1; // Reset index since we're not using playlist
         playlist = [nextVideo]; // Store as single item for display
         loadStream(nextVideo.url);
-        statusText.textContent = `Next: ${nextVideo.title}`;
         
         // Ensure next button stays enabled after loading
         updateNavigationButtons();
     } catch (error) {
         console.error('Error getting next video:', error);
-        statusText.textContent = 'Failed to load next video';
     } finally {
         // Always re-enable next button
         nextBtn.disabled = false;
@@ -230,7 +192,6 @@ stopBtn.addEventListener('click', () => {
     audioPlayer.pause();
     audioPlayer.currentTime = 0;
     updatePlayPauseButton(false);
-    statusText.textContent = 'Stopped';
 });
 
 // Volume control
@@ -240,22 +201,6 @@ volumeSlider.addEventListener('input', (e) => {
     volumeValue.textContent = `${volume}%`;
 });
 
-// Load YouTube URL
-loadBtn.addEventListener('click', () => {
-    const url = youtubeUrlInput.value.trim();
-    if (!url) {
-        statusText.textContent = 'Please enter a YouTube URL';
-        return;
-    }
-    loadStream(url);
-});
-
-// Enter key support for URL input
-youtubeUrlInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        loadBtn.click();
-    }
-});
 
 // Load stream function
 function loadStream(youtubeUrl) {
@@ -271,17 +216,6 @@ function loadStream(youtubeUrl) {
     
     isLoading = true;
     
-    // Find video title if in playlist
-    let videoTitle = 'Loading stream...';
-    if (currentIndex >= 0 && playlist[currentIndex]) {
-        videoTitle = `Loading: ${playlist[currentIndex].title}`;
-    } else {
-        const foundVideo = playlist.find(v => v.url === youtubeUrl);
-        if (foundVideo) {
-            videoTitle = `Loading: ${foundVideo.title}`;
-        }
-    }
-    statusText.textContent = videoTitle;
     playPauseBtn.disabled = true;
     
     // Create stream URL
@@ -321,28 +255,14 @@ function loadStream(youtubeUrl) {
         audioPlayer.load();
     }, 100);
     
-    // Wait for metadata - use a single persistent listener
-    const loadstartHandler = () => {
+    // Wait for metadata
+    audioPlayer.addEventListener('loadstart', () => {
         console.log('📡 Audio loadstart event');
-        if (currentIndex >= 0 && playlist[currentIndex]) {
-            statusText.textContent = `Connecting: ${playlist[currentIndex].title}`;
-        } else {
-            statusText.textContent = 'Connecting to stream...';
-        }
-    };
-    
-    // Remove old listener if exists, then add new one
-    audioPlayer.removeEventListener('loadstart', loadstartHandler);
-    audioPlayer.addEventListener('loadstart', loadstartHandler, { once: true });
+    }, { once: true });
     
     audioPlayer.addEventListener('loadedmetadata', () => {
         console.log('✅ Audio metadata loaded');
         isLoading = false;
-        if (currentIndex >= 0 && playlist[currentIndex]) {
-            statusText.textContent = `Ready: ${playlist[currentIndex].title}`;
-        } else {
-            statusText.textContent = 'Ready to play';
-        }
         playPauseBtn.disabled = false;
         updateNavigationButtons();
     }, { once: true });
@@ -359,17 +279,6 @@ function loadStream(youtubeUrl) {
         console.error('Error message:', audioPlayer.error?.message);
         console.trace('Error occurred at:');
         
-        let errorMsg = 'Error loading stream. ';
-        if (audioPlayer.error) {
-            switch(audioPlayer.error.code) {
-                case 1: errorMsg += 'MEDIA_ERR_ABORTED'; break;
-                case 2: errorMsg += 'Network error - check your connection'; break;
-                case 3: errorMsg += 'Decoding error - format not supported'; break;
-                case 4: errorMsg += 'Source not supported'; break;
-                default: errorMsg += audioPlayer.error.message || 'Unknown error';
-            }
-        }
-        statusText.textContent = errorMsg;
         playPauseBtn.disabled = false;
         updatePlayPauseButton(false);
     }, { once: true });
@@ -388,14 +297,8 @@ function loadStream(youtubeUrl) {
         audioPlayer.play().then(() => {
             console.log('✅ Audio play started');
             updatePlayPauseButton(true);
-            if (currentIndex >= 0 && playlist[currentIndex]) {
-                statusText.textContent = `Playing: ${playlist[currentIndex].title}`;
-            } else {
-                statusText.textContent = 'Playing...';
-            }
         }).catch(err => {
             console.error('❌ Play error:', err);
-            statusText.textContent = 'Click play to start';
         });
     }, { once: true });
     
@@ -432,39 +335,30 @@ function setupEndedListener() {
         if (isActuallyEnded) {
             console.log('✅ Song actually ended, getting next recommended video');
             // Auto-play next recommended video (like YouTube autoplay)
-            const currentUrl = youtubeUrlInput.value.trim();
+            const currentUrl = currentVideoUrl;
             if (currentUrl) {
-                statusText.textContent = 'Loading next recommended video...';
                 fetch(`/related?url=${encodeURIComponent(currentUrl)}`)
                     .then(response => response.json())
                     .then(data => {
                         if (data.videos && data.videos.length > 0) {
                             const nextVideo = data.videos[0];
-                            youtubeUrlInput.value = nextVideo.url;
+                            currentVideoUrl = nextVideo.url;
                             currentIndex = -1;
                             playlist = [nextVideo];
                             loadStream(nextVideo.url);
-                            statusText.textContent = `Next: ${nextVideo.title}`;
                         } else {
                             updatePlayPauseButton(false);
-                            statusText.textContent = 'No more videos';
                         }
                     })
                     .catch(error => {
                         console.error('Error getting next video:', error);
                         updatePlayPauseButton(false);
-                        statusText.textContent = 'Song ended';
                     });
             } else {
                 updatePlayPauseButton(false);
-                statusText.textContent = 'Song ended';
             }
         } else {
             console.log('⚠️ Song did not actually end, ignoring ended event (likely network issue)');
-            if (audioPlayer.error && audioPlayer.error.code === 2) {
-                console.log('Network error detected');
-                statusText.textContent = 'Connection lost. Please reload the stream.';
-            }
         }
     };
     
@@ -486,7 +380,6 @@ function updatePlayPauseButton(isPlaying) {
 searchBtn.addEventListener('click', () => {
     const query = searchQueryInput.value.trim();
     if (!query) {
-        statusText.textContent = 'Please enter a search query';
         return;
     }
     searchYouTube(query);
@@ -499,10 +392,24 @@ searchQueryInput.addEventListener('keypress', (e) => {
     }
 });
 
+// Create skeleton screen for search results
+function createSkeletonScreen() {
+    searchResults.innerHTML = '';
+    for (let i = 0; i < 10; i++) {
+        const skeletonItem = document.createElement('div');
+        skeletonItem.className = 'skeleton-item';
+        skeletonItem.innerHTML = `
+            <div class="skeleton-title"></div>
+            <div class="skeleton-duration"></div>
+        `;
+        searchResults.appendChild(skeletonItem);
+    }
+}
+
 // Search YouTube
 async function searchYouTube(query) {
-    searchResults.innerHTML = '<div class="loading">Searching...</div>';
-    statusText.textContent = 'Searching...';
+    // Show skeleton screen
+    createSkeletonScreen();
     
     // Reset search state
     allSearchVideos = [];
@@ -518,13 +425,11 @@ async function searchYouTube(query) {
         
         if (data.error) {
             searchResults.innerHTML = `<div class="error">${data.error}</div>`;
-            statusText.textContent = 'Search failed';
             return;
         }
         
         if (!data.videos || data.videos.length === 0) {
-            searchResults.innerHTML = '<div class="loading">No results found</div>';
-            statusText.textContent = 'No results found';
+            searchResults.innerHTML = '<div class="error">No results found</div>';
             return;
         }
         
@@ -537,12 +442,9 @@ async function searchYouTube(query) {
         
         // Display first batch
         loadMoreVideos();
-        
-        statusText.textContent = `Found ${data.videos.length} results`;
     } catch (error) {
         console.error('Search error:', error);
         searchResults.innerHTML = '<div class="error">Failed to search. Please try again.</div>';
-        statusText.textContent = 'Search failed';
     }
 }
 
@@ -590,7 +492,7 @@ function loadMoreVideos() {
             if (currentIndex === -1) currentIndex = absoluteIndex;
             
             searchResults.innerHTML = '';
-            youtubeUrlInput.value = video.url;
+            currentVideoUrl = video.url;
             
             // Update playlist with all search results
             playlist = allSearchVideos.map(v => ({
@@ -655,7 +557,7 @@ function updateNavigationButtons() {
     // Next button: always enable if there's a current video
     // The next button gets related videos dynamically, not from playlist
     // So it doesn't depend on playlist length or currentIndex
-    const hasCurrentVideo = youtubeUrlInput.value.trim().length > 0;
+    const hasCurrentVideo = currentVideoUrl && currentVideoUrl.length > 0;
     nextBtn.disabled = !hasCurrentVideo;
     
     console.log('Navigation buttons updated:', {
@@ -734,20 +636,10 @@ if (stopBtn) {
 // Handle audio player events
 audioPlayer.addEventListener('play', () => {
     updatePlayPauseButton(true);
-    if (currentIndex >= 0 && playlist[currentIndex]) {
-        statusText.textContent = `Playing: ${playlist[currentIndex].title}`;
-    } else {
-        statusText.textContent = 'Playing...';
-    }
 });
 
 audioPlayer.addEventListener('pause', () => {
     updatePlayPauseButton(false);
-    if (currentIndex >= 0 && playlist[currentIndex]) {
-        statusText.textContent = `Paused: ${playlist[currentIndex].title}`;
-    } else {
-        statusText.textContent = 'Paused';
-    }
 });
 
 // Set up ended listener initially
