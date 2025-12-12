@@ -124,12 +124,18 @@ audioPlayer.addEventListener('progress', () => {
 // Handle stalled events
 audioPlayer.addEventListener('stalled', () => {
     console.log('⚠️ Stream stalled - waiting for data');
+    // Don't reload or restart - let browser handle buffering naturally
+    // The stream should resume automatically when data is available
 });
 
 // Handle waiting events
 audioPlayer.addEventListener('waiting', () => {
     console.log('⏳ Stream waiting for data');
+    // Don't reload or restart - let browser handle buffering naturally
 });
+
+// Don't add a global canplay listener - it will interfere with loadStream's canplay handler
+// The browser will automatically resume playback when buffering completes
 
 // Handle suspend events
 audioPlayer.addEventListener('suspend', () => {
@@ -472,28 +478,32 @@ function loadStream(youtubeUrl) {
         }
     }, 30000);
     
-    // Auto-play when loaded
-    audioPlayer.addEventListener('canplay', () => {
+    // Auto-play when loaded - only for new streams
+    const canplayHandler = () => {
         console.log('▶️ Audio can play');
-        // Ensure time is reset before playing
-        if (audioPlayer.currentTime > 0.1) {
-            audioPlayer.currentTime = 0;
-        }
-        if (currentTimeDisplay) currentTimeDisplay.textContent = '0:00';
-        if (progressFill) progressFill.style.width = '0%';
-        if (progressThumb) progressThumb.style.left = '0%';
-        lastCurrentTime = 0;
-        // Reset ended handler flag when new stream is ready to play
-        isHandlingEnded = false;
-        
-        audioPlayer.play().then(() => {
-            console.log('✅ Audio play started');
-            updatePlayPauseButton(true);
-        }).catch(err => {
-            console.error('❌ Play error:', err);
+        // Only reset time if this is a new stream load (not a buffering recovery)
+        if (isLoading) {
+            // Ensure time is reset before playing new stream
+            if (audioPlayer.currentTime > 0.1) {
+                audioPlayer.currentTime = 0;
+            }
+            if (currentTimeDisplay) currentTimeDisplay.textContent = '0:00';
+            if (progressFill) progressFill.style.width = '0%';
+            if (progressThumb) progressThumb.style.left = '0%';
+            lastCurrentTime = 0;
+            // Reset ended handler flag when new stream is ready to play
             isHandlingEnded = false;
-        });
-    }, { once: true });
+            
+            audioPlayer.play().then(() => {
+                console.log('✅ Audio play started');
+                updatePlayPauseButton(true);
+            }).catch(err => {
+                console.error('❌ Play error:', err);
+                isHandlingEnded = false;
+            });
+        }
+    };
+    audioPlayer.addEventListener('canplay', canplayHandler, { once: true });
     
     audioPlayer.addEventListener('canplaythrough', () => {
         console.log('✅ Audio can play through');

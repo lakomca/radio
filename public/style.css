@@ -42,8 +42,8 @@ body {
 
 .player-header {
     display: flex;
-    align-items: center;
-    justify-content: flex-start;
+    align-items: flex-start;
+    gap: 20px;
     margin-bottom: 15px;
 }
 
@@ -103,6 +103,14 @@ body {
     max-width: 500px;
 }
 
+.player-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    min-width: 0;
+}
+
 .now-playing-title {
     font-size: 1em;
     color: #ffffff;
@@ -111,9 +119,6 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
     line-height: 1.4;
-    margin-bottom: 15px;
-    padding-bottom: 15px;
-    border-bottom: 1px solid #1a2a2f;
 }
 
 .player-controls-row {
