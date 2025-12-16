@@ -1,13 +1,43 @@
+require('dotenv').config();
 const express = require('express');
+const session = require('express-session');
 const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const cors = require('cors');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// CORS configuration
+app.use(cors({
+    origin: true,
+    credentials: true
+}));
+
+// Session configuration
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: process.env.NODE_ENV === 'production',
+        httpOnly: true,
+        maxAge: process.env.REMEMBER_ME === 'true' ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000 // 30 days or 1 day
+    }
+}));
+
+// Parse JSON bodies
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 // Serve static files
 app.use(express.static('public'));
+
+// Serve radio-stations.json
+app.get('/radio-stations.json', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'radio-stations.json'));
+});
 
 // Explicit root route to serve index.html
 app.get('/', (req, res) => {
@@ -310,8 +340,9 @@ app.use((req, res, next) => {
 // Endpoint to start streaming a YouTube URL
 app.get('/stream', (req, res) => {
     const youtubeUrl = req.query.url;
+    const retry = req.query.retry === 'true'; // Allow retry parameter
     
-    console.log(`Stream request received for: ${youtubeUrl}`);
+    console.log(`Stream request received for: ${youtubeUrl}${retry ? ' (retry)' : ''}`);
     
     if (!youtubeUrl) {
         console.log('Stream request missing URL parameter');
@@ -329,7 +360,17 @@ app.get('/stream', (req, res) => {
             });
         }
 
-        const url = audioUrl;
+        // Validate the URL
+        const url = audioUrl.trim();
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+            console.error('Invalid audio URL format:', url);
+            return res.status(500).json({ 
+                error: 'Invalid audio URL', 
+                details: 'yt-dlp returned an invalid URL format',
+                hint: 'The video might be unavailable or restricted'
+            });
+        }
+
         console.log(`Starting ffmpeg stream for: ${youtubeUrl}`);
         console.log(`Audio URL: ${url.substring(0, 100)}...`);
         
@@ -374,11 +415,50 @@ app.get('/stream', (req, res) => {
             if (msg.includes('Stream #0') || msg.includes('Audio:') || msg.includes('Duration:')) {
                 console.log(`FFmpeg info: ${msg.substring(0, 150).trim()}`);
             }
-            if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('failed') || msg.toLowerCase().includes('http error')) {
+            // Check for HTTP errors (404, 403, etc.)
+            if (msg.includes('404') || msg.includes('Not Found')) {
+                // Only log once per stream to avoid spam
+                if (!hasError) {
+                    console.error(`FFmpeg error: 404 Not Found - URL may have expired or video is unavailable`);
+                    // Only log full error if it's not a storyboard/image URL (those are common and not critical)
+                    if (!msg.includes('storyboard') && !msg.includes('i.ytimg.com')) {
+                        console.error(`Full error: ${msg.substring(0, 200)}`);
+                    }
+                }
+                hasError = true;
+                // Try to get a fresh URL and retry (optional - you can enable this)
+                // For now, just report the error clearly
+                if (!res.headersSent) {
+                    res.status(500).json({ 
+                        error: 'Stream URL expired or video unavailable', 
+                        details: 'The YouTube stream URL is no longer valid (404). This usually means the URL expired or the video is unavailable.',
+                        hint: 'Try refreshing the page or searching for the video again'
+                    });
+                } else {
+                    res.end();
+                }
+            } else if (msg.includes('403') || msg.includes('Forbidden')) {
+                console.error(`FFmpeg error: 403 Forbidden - Video may be restricted`);
+                console.error(`Full error: ${msg}`);
+                hasError = true;
+                if (!res.headersSent) {
+                    res.status(500).json({ 
+                        error: 'Video access forbidden', 
+                        details: 'The video may be restricted, private, or unavailable in your region.',
+                        hint: 'Try a different video'
+                    });
+                } else {
+                    res.end();
+                }
+            } else if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('failed') || msg.toLowerCase().includes('http error')) {
                 console.error(`FFmpeg error: ${msg}`);
                 hasError = true;
                 if (!res.headersSent) {
-                    res.status(500).json({ error: 'FFmpeg streaming error', details: msg.substring(0, 200) });
+                    res.status(500).json({ 
+                        error: 'FFmpeg streaming error', 
+                        details: msg.substring(0, 200),
+                        hint: 'Check server logs for more details'
+                    });
                 } else {
                     res.end();
                 }
@@ -418,22 +498,36 @@ app.get('/stream', (req, res) => {
         ffmpeg.on('close', (code) => {
             console.log(`FFmpeg process exited with code ${code}`);
             // Code 0 is normal exit, code 1 might be error but could also be end of stream
-            if (code !== 0 && code !== 1) {
+            // Code 8 typically means input file error (like 404)
+            if (code === 8) {
+                console.error(`FFmpeg exited with code 8 - Input file error (likely 404 or invalid URL)`);
+                if (!res.headersSent && !hasError) {
+                    res.status(500).json({ 
+                        error: 'Stream URL expired or invalid', 
+                        details: 'FFmpeg could not access the stream URL (error code 8). The URL may have expired or the video is unavailable.',
+                        hint: 'YouTube URLs expire quickly. Try refreshing or searching again.',
+                        code: code
+                    });
+                    return;
+                }
+            } else if (code !== 0 && code !== 1) {
                 console.error(`FFmpeg exited with error code: ${code}`);
                 if (!res.headersSent && !hasError) {
                     res.status(500).json({ 
                         error: 'FFmpeg process failed', 
                         details: `FFmpeg exited with code ${code}`,
-                        hint: 'Check Railway logs for FFmpeg error details'
+                        hint: 'Check server logs for FFmpeg error details',
+                        code: code
                     });
                     return;
                 }
             }
-            if (!res.headersSent) {
+            if (!res.headersSent && !hasError) {
                 res.status(500).json({ 
                     error: 'Stream failed to start', 
                     details: 'FFmpeg process ended before streaming started',
-                    hint: 'Check Railway logs for FFmpeg error details'
+                    hint: 'The video URL may be invalid or expired. Try refreshing.',
+                    code: code
                 });
             } else {
                 // Only end if headers were sent (stream was started)
@@ -730,6 +824,302 @@ app.get('/related', async (req, res) => {
             details: error.message,
             hint: 'This might be due to yt-dlp limitations or YouTube API changes'
         });
+    }
+});
+
+
+// ===== RADIO BROWSER API ENDPOINTS =====
+
+const RADIO_BROWSER_API = 'https://de1.api.radio-browser.info/json';
+const iprdFetcher = require('./scripts/iprd-fetcher');
+const logoLookup = require('./scripts/logo-lookup');
+
+// Get all countries from IPRD repository
+app.get('/api/radio/countries', async (req, res) => {
+    try {
+        const countries = await iprdFetcher.getAllCountries();
+        
+        // Map to expected format
+        const formattedCountries = countries.map(country => ({
+            name: country.name,
+            iso_3166_1: country.iso_3166_1,
+            stationcount: country.stationcount || 0
+        }));
+        
+        res.json({ countries: formattedCountries });
+    } catch (error) {
+        console.error('Error fetching countries from IPRD:', error);
+        res.status(500).json({ error: 'Failed to fetch countries', details: error.message });
+    }
+});
+
+// Curated radio stations for specific countries
+const curatedStations = {
+    'TR': [
+        {
+            stationuuid: 'curated-alemfm',
+            name: 'Alem FM',
+            url_resolved: 'http://turkmedya.radyotvonline.net/alemfmaac',
+            favicon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Flag_of_Turkey.svg/512px-Flag_of_Turkey.svg.png',
+            country: 'Turkey',
+            tags: 'Turkish, Music',
+            homepage: 'https://www.alemfm.com.tr'
+        },
+        {
+            stationuuid: 'curated-powerturkfm',
+            name: 'Power Türk FM',
+            url_resolved: 'https://live.powerapp.com.tr/powerturk/abr/powerturk/128/playlist.m3u8',
+            favicon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Flag_of_Turkey.svg/512px-Flag_of_Turkey.svg.png',
+            country: 'Turkey',
+            tags: 'Turkish, Music',
+            homepage: 'https://www.powerturk.com'
+        },
+        {
+            stationuuid: 'curated-kafaradyo',
+            name: 'Kafa Radyo',
+            url_resolved: 'https://moondigitalmaster.radyotvonline.net/kafaradyo/playlist.m3u8',
+            favicon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Flag_of_Turkey.svg/512px-Flag_of_Turkey.svg.png',
+            country: 'Turkey',
+            tags: 'Turkish, Music',
+            homepage: ''
+        },
+        {
+            stationuuid: 'curated-kralfm',
+            name: 'Kral FM',
+            url_resolved: 'http://46.20.3.204/',
+            favicon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Flag_of_Turkey.svg/512px-Flag_of_Turkey.svg.png',
+            country: 'Turkey',
+            tags: 'Turkish, Music',
+            homepage: 'https://www.kral.com.tr'
+        },
+        {
+            stationuuid: 'curated-kralpop',
+            name: 'Kral Pop',
+            url_resolved: 'http://kralpopwmp.radyotvonline.com/',
+            favicon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Flag_of_Turkey.svg/512px-Flag_of_Turkey.svg.png',
+            country: 'Turkey',
+            tags: 'Turkish, Pop Music',
+            homepage: 'https://www.kral.com.tr'
+        },
+        {
+            stationuuid: 'curated-joyturk',
+            name: 'Joy Türk',
+            url_resolved: 'https://playerservices.streamtheworld.com/api/livestream-redirect/JOY_TURK_SC',
+            favicon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Flag_of_Turkey.svg/512px-Flag_of_Turkey.svg.png',
+            country: 'Turkey',
+            tags: 'Turkish, Alternative Music',
+            homepage: 'https://www.joyturk.com.tr'
+        },
+        {
+            stationuuid: 'curated-slowturk',
+            name: 'Slow Türk',
+            url_resolved: 'https://radyo.duhnet.tv/ak_dtvh_slowturk',
+            favicon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Flag_of_Turkey.svg/512px-Flag_of_Turkey.svg.png',
+            country: 'Turkey',
+            tags: 'Turkish, Slow Music',
+            homepage: ''
+        },
+        {
+            stationuuid: 'curated-superfm',
+            name: 'Super FM',
+            url_resolved: 'https://playerservices.streamtheworld.com/api/livestream-redirect/SUPER_FM_SC',
+            favicon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Flag_of_Turkey.svg/512px-Flag_of_Turkey.svg.png',
+            country: 'Turkey',
+            tags: 'Turkish, Music',
+            homepage: 'https://www.superfm.com.tr'
+        },
+        {
+            stationuuid: 'curated-numberoneturk',
+            name: 'Number One Türk',
+            url_resolved: 'https://n10101m.mediatriple.net/numberoneturk',
+            favicon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Flag_of_Turkey.svg/512px-Flag_of_Turkey.svg.png',
+            country: 'Turkey',
+            tags: 'Turkish, Pop Music',
+            homepage: ''
+        },
+        {
+            stationuuid: 'curated-bestfm',
+            name: 'Best FM',
+            url_resolved: 'http://46.20.7.126/bestfmmp3',
+            favicon: 'https://www.google.com/s2/favicons?domain=bestfm.com.tr&sz=128',
+            country: 'Turkey',
+            tags: 'Turkish, Music',
+            homepage: 'https://www.bestfm.com.tr'
+        },
+        {
+            stationuuid: 'curated-showradyo',
+            name: 'Show Radyo',
+            url_resolved: 'http://46.20.3.229/',
+            favicon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Flag_of_Turkey.svg/512px-Flag_of_Turkey.svg.png',
+            country: 'Turkey',
+            tags: 'Turkish, Music',
+            homepage: ''
+        },
+        {
+            stationuuid: 'curated-palfm',
+            name: 'Pal FM',
+            url_resolved: 'http://shoutcast.radyogrup.com:1030/',
+            favicon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Flag_of_Turkey.svg/512px-Flag_of_Turkey.svg.png',
+            country: 'Turkey',
+            tags: 'Turkish, Music',
+            homepage: ''
+        },
+        {
+            stationuuid: 'curated-palstation',
+            name: 'Pal Station',
+            url_resolved: 'http://shoutcast.radyogrup.com:1020/',
+            favicon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Flag_of_Turkey.svg/512px-Flag_of_Turkey.svg.png',
+            country: 'Turkey',
+            tags: 'Turkish, Music',
+            homepage: ''
+        },
+        {
+            stationuuid: 'curated-powerfm',
+            name: 'Power FM',
+            url_resolved: 'https://live.powerapp.com.tr/powerfm/abr/playlist.m3u8',
+            favicon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Flag_of_Turkey.svg/512px-Flag_of_Turkey.svg.png',
+            country: 'Turkey',
+            tags: 'Turkish, Music',
+            homepage: 'https://www.powerfm.com.tr'
+        },
+        {
+            stationuuid: 'curated-virginradyo',
+            name: 'Virgin Radyo',
+            url_resolved: 'https://playerservices.streamtheworld.com/api/livestream-redirect/VIRGIN_RADIO_SC',
+            favicon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Flag_of_Turkey.svg/512px-Flag_of_Turkey.svg.png',
+            country: 'Turkey',
+            tags: 'Turkish, Music',
+            homepage: 'https://www.virginradyo.com.tr'
+        }
+    ]
+};
+
+// Get stations for a country
+app.get('/api/radio/stations/:countryCode', async (req, res) => {
+    try {
+        const { countryCode } = req.params;
+        const limit = req.query.limit || 1000;
+        const enhanceLogos = req.query.enhanceLogos !== 'false'; // Default to true
+        
+        // Check if we have curated stations for this country
+        const curated = curatedStations[countryCode.toUpperCase()] || [];
+        
+        // Fetch from IPRD repository first
+        let iprdStations = [];
+        try {
+            iprdStations = await iprdFetcher.getStationsForCountry(countryCode);
+        } catch (iprdError) {
+            console.warn('IPRD fetch error, trying Radio Browser API:', iprdError.message);
+        }
+        
+        // Fallback to Radio Browser API if IPRD has no stations
+        let apiStations = [];
+        if (iprdStations.length === 0) {
+            try {
+                const response = await fetch(
+                    `${RADIO_BROWSER_API}/stations/search?countrycode=${countryCode}&limit=${limit}&order=clickcount&reverse=true`
+                );
+                
+                if (response.ok) {
+                    apiStations = await response.json();
+                }
+            } catch (apiError) {
+                console.warn('Radio Browser API error:', apiError.message);
+            }
+        }
+        
+        // Merge: curated first, then IPRD, then Radio Browser API
+        let allStations = [...curated, ...iprdStations, ...apiStations];
+        
+        // Enhance with logos for stations that don't have them
+        // This is optimized to only process stations without valid logos
+        if (enhanceLogos && allStations.length > 0) {
+            try {
+                // Increase limit to 300 stations for better logo coverage
+                // Since we only enhance stations without logos, this should still be reasonably fast
+                const stationsToEnhance = allStations.slice(0, 300);
+                const enhanced = await logoLookup.enhanceStationsWithLogos(stationsToEnhance);
+                allStations = [...enhanced, ...allStations.slice(300)];
+            } catch (logoError) {
+                console.warn('Logo enhancement error:', logoError.message);
+                // Continue without enhancement if it fails
+            }
+        }
+        
+        res.json({ stations: allStations });
+    } catch (error) {
+        console.error('Error fetching stations:', error);
+        res.status(500).json({ error: 'Failed to fetch stations', details: error.message });
+    }
+});
+
+// Get working stream URL for a station (try multiple URLs)
+app.get('/api/radio/stream/:stationId', async (req, res) => {
+    try {
+        const { stationId } = req.params;
+        
+        // Check if it's an IPRD station (format: iprd-{code}-{index})
+        if (stationId.startsWith('iprd-')) {
+            // For IPRD stations, the URL is already in the station data
+            // Frontend should pass the URL directly, but we'll handle requests here
+            return res.status(404).json({ error: 'IPRD stations should use direct URLs' });
+        }
+        
+        // Check curated stations first
+        for (const [code, stations] of Object.entries(curatedStations)) {
+            const station = stations.find(s => s.stationuuid === stationId);
+            if (station && station.url_resolved) {
+                return res.json({
+                    streamUrl: station.url_resolved,
+                    alternativeUrls: [],
+                    station: {
+                        name: station.name,
+                        country: station.country,
+                        favicon: station.favicon,
+                        homepage: station.homepage
+                    }
+                });
+            }
+        }
+        
+        // Try Radio Browser API
+        const stationResponse = await fetch(`${RADIO_BROWSER_API}/stations/byuuid/${stationId}`);
+        if (!stationResponse.ok) {
+            throw new Error(`Station not found: ${stationResponse.status}`);
+        }
+        
+        const stations = await stationResponse.json();
+        if (!stations || stations.length === 0) {
+            throw new Error('Station not found');
+        }
+        
+        const station = stations[0];
+        const streamUrls = station.url_resolved ? [station.url_resolved] : 
+                          station.url ? [station.url] : [];
+        
+        // If we have url_resolved, try that first, then fall back to url
+        if (station.url_resolved && station.url && station.url_resolved !== station.url) {
+            streamUrls.push(station.url);
+        }
+        
+        if (streamUrls.length === 0) {
+            throw new Error('No stream URLs available for this station');
+        }
+        
+        // Return the first URL (most reliable), frontend will try others if needed
+        res.json({ 
+            streamUrl: streamUrls[0],
+            alternativeUrls: streamUrls.slice(1),
+            station: {
+                name: station.name,
+                country: station.country,
+                favicon: station.favicon,
+                homepage: station.homepage
+            }
+        });
+    } catch (error) {
+        console.error('Error getting stream URL:', error);
+        res.status(500).json({ error: 'Failed to get stream URL', details: error.message });
     }
 });
 

@@ -24,12 +24,14 @@ const currentTimeDisplay = document.getElementById('currentTime');
 const totalTimeDisplay = document.getElementById('totalTime');
 const nowPlayingTitle = document.getElementById('nowPlayingTitle');
 const videoThumbnail = document.getElementById('videoThumbnail');
+// Navbar brand removed - always shows PULSE
 
 let currentStreamUrl = null;
 let currentVideoUrl = null; // Track current video URL (replaces youtubeUrlInput)
 let currentVideoDuration = null; // Track current video duration from search results
 let currentVideoTitle = null; // Track current video title
 let currentVideoId = null; // Track current video ID for thumbnail
+let currentStation = null; // Track current radio station with logo info
 let isLoading = false;
 let playlist = []; // Array to store playlist
 let currentIndex = -1; // Current song index in playlist
@@ -320,7 +322,10 @@ stopBtn.addEventListener('click', () => {
     audioPlayer.currentTime = 0;
     updatePlayPauseButton(false);
     updateNowPlayingTitle(null);
-    updateVideoThumbnail(null);
+    currentStation = null; // Clear current station
+    currentVideoId = null; // Clear video ID
+    updateVideoThumbnail(null); // Clear thumbnail
+    updateTabFavicon(null); // Revert to default favicon
 });
 
 // Volume control - toggle slider on button click
@@ -493,7 +498,7 @@ function loadStream(youtubeUrl) {
                         console.log('Attempting playback with buffered data (readyState >= 1)');
                         audioPlayer.play().then(() => {
                             console.log('✅ Audio play started via progress check');
-                            isLoading = false;
+        isLoading = false;
                             updatePlayPauseButton(true);
                             cleanupProgressCheck();
                         }).catch(err => {
@@ -504,7 +509,7 @@ function loadStream(youtubeUrl) {
                 } else if (audioPlayer.readyState >= 1) {
                     // We have metadata but no buffered data yet - log but don't play yet
                     console.log(`⏳ Have metadata (readyState: ${audioPlayer.readyState}) but no buffered data yet...`);
-                } else {
+        } else {
                     console.log(`⏳ Still waiting for data... readyState: ${audioPlayer.readyState}`);
                 }
             } else {
@@ -621,8 +626,8 @@ function loadStream(youtubeUrl) {
                     if (time >= 15000) {
                         console.warn(`⏱️ ${message} - no data available, resetting loading flag`);
                         isLoading = false;
-                        playPauseBtn.disabled = false;
-                        updatePlayPauseButton(false);
+        playPauseBtn.disabled = false;
+        updatePlayPauseButton(false);
                         cleanupProgressCheck();
                     }
                 }
@@ -657,13 +662,13 @@ function loadStream(youtubeUrl) {
             // Reset ended handler flag when new stream is ready to play
             isHandlingEnded = false;
             
-            audioPlayer.play().then(() => {
-                console.log('✅ Audio play started');
+        audioPlayer.play().then(() => {
+            console.log('✅ Audio play started');
                 isLoading = false; // Mark as loaded after successful play
-                updatePlayPauseButton(true);
+            updatePlayPauseButton(true);
                 cleanupProgressCheck();
-            }).catch(err => {
-                console.error('❌ Play error:', err);
+        }).catch(err => {
+            console.error('❌ Play error:', err);
                 isLoading = false; // Mark as loaded even on error
                 isHandlingEnded = false;
                 cleanupProgressCheck();
@@ -909,6 +914,655 @@ searchQueryInput.addEventListener('keypress', (e) => {
     }
 });
 
+// Radio Browser API elements
+const countriesSection = document.getElementById('countriesSection');
+const genresSection = document.getElementById('genresSection');
+const stationsSection = document.getElementById('stationsSection');
+const countriesGrid = document.getElementById('countriesGrid');
+const genresGrid = document.getElementById('genresGrid');
+const stationsList = document.getElementById('stationsList');
+const stationsHeader = document.getElementById('stationsHeader');
+const backToCountriesBtn = document.getElementById('backToCountriesBtn');
+const backToGenresBtn = document.getElementById('backToGenresBtn');
+let currentCountryCode = null;
+let currentCountryName = null;
+let currentGenre = null;
+
+// Flag emoji helper function - converts ISO country code to flag emoji
+function getCountryFlag(countryCode) {
+    if (!countryCode || countryCode.length !== 2) {
+        return '🌐'; // Fallback to globe for invalid codes
+    }
+    
+    try {
+        const code = countryCode.toUpperCase();
+        const base = 0x1F1E6; // Regional Indicator Symbol Letter A
+        
+        // Convert each letter to regional indicator symbol
+        const first = String.fromCodePoint(base + (code.charCodeAt(0) - 65));
+        const second = String.fromCodePoint(base + (code.charCodeAt(1) - 65));
+        
+        return first + second;
+    } catch (error) {
+        // Fallback to globe emoji if code point conversion fails
+        console.warn('Failed to generate flag for', countryCode, error);
+        return '🌐';
+    }
+}
+
+// Load countries from API
+async function loadCountries() {
+    countriesGrid.innerHTML = '<div class="loading-spinner"></div>';
+    countriesSection.style.display = 'block';
+    stationsSection.style.display = 'none';
+    
+    try {
+        const response = await fetch('/api/radio/countries');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!data || !data.countries) {
+            throw new Error('Invalid response format from server');
+        }
+        
+        displayCountries(data.countries);
+    } catch (error) {
+        console.error('Error loading countries:', error);
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error';
+        errorDiv.textContent = `Failed to load countries: ${error.message}`;
+        countriesGrid.innerHTML = '';
+        countriesGrid.appendChild(errorDiv);
+    }
+}
+
+// Display countries in grid
+function displayCountries(countries) {
+    countriesGrid.innerHTML = '';
+    
+    if (!countries || !Array.isArray(countries)) {
+        countriesGrid.innerHTML = '<div class="error">Invalid countries data received</div>';
+        return;
+    }
+    
+    countries.forEach(country => {
+        try {
+            // Safely extract country code and name
+            const countryCode = String(country.iso_3166_1 || country.iso_3166_1_2 || '').trim();
+            const countryName = String(country.name || 'Unknown').trim();
+            
+            // Validate country code - must be exactly 2 characters
+            if (!countryCode || countryCode.length !== 2) {
+                console.warn('Skipping country with invalid code:', countryCode, countryName);
+                return; // Skip invalid country codes
+            }
+            
+            const countryItem = document.createElement('div');
+            countryItem.className = 'country-item';
+            
+            const flagDiv = document.createElement('div');
+            flagDiv.className = 'country-flag';
+            flagDiv.textContent = getCountryFlag(countryCode);
+            
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'country-name';
+            nameDiv.textContent = countryName;
+            
+            countryItem.appendChild(flagDiv);
+            countryItem.appendChild(nameDiv);
+            
+            countryItem.addEventListener('click', () => {
+                loadStationsForCountry(countryCode.toUpperCase(), countryName);
+            });
+            
+            countriesGrid.appendChild(countryItem);
+        } catch (error) {
+            console.error('Error displaying country:', country, error);
+        }
+    });
+}
+
+// Load stations for a country
+async function loadStationsForCountry(countryCode, countryName) {
+    currentCountryCode = countryCode;
+    currentCountryName = countryName;
+    
+    // Hide countries section and show stations section
+    countriesSection.style.display = 'none';
+    stationsSection.style.display = 'block';
+    
+    stationsList.innerHTML = '<div class="loading-spinner"></div>';
+    stationsHeader.textContent = `Radio Stations - ${countryName}`;
+    
+    try {
+        const response = await fetch(`/api/radio/stations/${countryCode}?limit=1000`);
+        if (!response.ok) {
+            throw new Error('Failed to load stations');
+        }
+        
+        const data = await response.json();
+        displayStations(data.stations);
+    } catch (error) {
+        console.error('Error loading stations:', error);
+        stationsList.innerHTML = `<div class="error">Failed to load stations: ${error.message}</div>`;
+    }
+}
+
+// Validate if a URL is valid and safe to use for images
+function isValidImageUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    
+    try {
+        const urlObj = new URL(url);
+        // Only allow http and https protocols
+        if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
+            return false;
+        }
+        
+        // Reject URLs that look like invalid paths (common problematic patterns)
+        const problematicPatterns = [
+            /^(logo|favicon|image|icon|300|192)$/i,  // Just a filename without domain
+            /^\/\/[^\/]/,  // Protocol-relative URLs that might fail
+            /\.(php|asp|aspx|jsp|cgi)$/i,  // Server-side scripts (might be dynamic)
+        ];
+        
+        const pathname = urlObj.pathname.toLowerCase();
+        for (const pattern of problematicPatterns) {
+            if (pattern.test(pathname) || pattern.test(urlObj.hostname)) {
+                return false;
+            }
+        }
+        
+        // Basic checks - reasonable length and has a domain
+        if (url.length < 5 || url.length > 500) return false;
+        if (!urlObj.hostname || urlObj.hostname.length < 3) return false;
+        
+        // Prefer common image extensions (but don't require them as some URLs use query params)
+        const imageExtensions = /\.(jpg|jpeg|png|gif|svg|ico|webp)(\?|$)/i;
+        const hasImageExtension = imageExtensions.test(pathname);
+        
+        // Allow URLs with image extensions or common favicon paths
+        return hasImageExtension || /favicon|logo|icon/i.test(pathname);
+    } catch (e) {
+        // Invalid URL
+        return false;
+    }
+}
+
+// Display stations in grid
+function displayStations(stations) {
+    stationsList.innerHTML = '';
+    
+    if (!stations || stations.length === 0) {
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error';
+        errorDiv.textContent = 'No stations found for this country';
+        stationsList.appendChild(errorDiv);
+        return;
+    }
+    
+    stations.forEach(station => {
+        try {
+            const stationItem = document.createElement('div');
+            stationItem.className = 'station-item';
+            
+            // Create logo container
+            const logoContainer = document.createElement('div');
+            logoContainer.className = 'station-logo';
+            
+            // Try to use station logo/favicon if available
+            // Check both favicon and logo fields (backend logo enhancement adds to favicon)
+            const logoUrl = station.favicon || station.logo || station.favicon_url;
+            if (logoUrl && isValidImageUrl(logoUrl)) {
+                // Create emoji span as placeholder
+                const emojiSpan = document.createElement('span');
+                emojiSpan.textContent = '📻';
+                emojiSpan.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 1.5em;';
+                logoContainer.appendChild(emojiSpan);
+                
+                const logoImg = document.createElement('img');
+                logoImg.src = logoUrl;
+                logoImg.alt = station.name || 'Radio Station';
+                logoImg.style.cssText = 'width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; opacity: 0; transition: opacity 0.2s;';
+                logoImg.loading = 'lazy';
+                
+                logoImg.onload = function() {
+                    // Show image and hide emoji when image loads successfully
+                    logoImg.style.opacity = '1';
+                    emojiSpan.style.display = 'none';
+                };
+                
+                logoImg.onerror = function() {
+                    // Hide failed image, emoji will remain visible
+                    this.remove();
+                };
+                
+                // Append image
+                logoContainer.appendChild(logoImg);
+            } else {
+                // No valid logo URL, use emoji
+                logoContainer.textContent = '📻';
+            }
+            
+            // Create station info
+            const stationInfo = document.createElement('div');
+            stationInfo.className = 'station-info';
+            
+            const stationName = document.createElement('div');
+            stationName.className = 'station-name';
+            stationName.textContent = station.name || 'Unknown Station';
+            
+            const stationGenre = document.createElement('div');
+            stationGenre.className = 'station-genre';
+            stationGenre.textContent = station.tags || station.genre || 'Radio';
+            
+            stationInfo.appendChild(stationName);
+            stationInfo.appendChild(stationGenre);
+            
+            stationItem.appendChild(logoContainer);
+            stationItem.appendChild(stationInfo);
+            
+            stationItem.addEventListener('click', () => {
+                playRadioStation(station);
+            });
+            
+            stationsList.appendChild(stationItem);
+        } catch (error) {
+            console.warn('Error displaying station:', station, error);
+            // Skip this station and continue with others
+        }
+    });
+}
+
+// Show stations for a category
+function showCategoryStations(category) {
+    // Map category names to data keys
+    const categoryMap = {
+        'news': 'news',
+        'live-sports': 'sports',
+        'nonstop-music': 'music',
+        'audiobooks': 'audiobooks',
+        'podcasts': 'podcasts'
+    };
+    
+    const dataKey = categoryMap[category];
+    if (!dataKey || !radioStationsData || !radioStationsData[dataKey]) {
+        searchResults.innerHTML = '<div class="error">No stations available for this category yet</div>';
+        return;
+    }
+    
+    const stations = radioStationsData[dataKey];
+    if (stations.length === 0) {
+        searchResults.innerHTML = '<div class="error">No stations available for this category yet</div>';
+        return;
+    }
+    
+    // Display stations in search results area
+    displayCategoryStations(stations, category);
+}
+
+// Display category stations in search results
+function displayCategoryStations(stations, category) {
+    // Build all station cards first in a document fragment to avoid flickering
+    const fragment = document.createDocumentFragment();
+    
+    stations.forEach(station => {
+        const stationCard = document.createElement('div');
+        // Use result-item class instead of skeleton-item to avoid loading animation
+        stationCard.className = 'result-item';
+        stationCard.style.cursor = 'pointer';
+        
+        // Create logo element - try to use logo if available, otherwise use emoji
+        const logoContainer = document.createElement('div');
+        logoContainer.style.cssText = 'width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; font-size: 2.5em; flex-shrink: 0;';
+        
+        if (station.logo) {
+            const logoImg = document.createElement('img');
+            logoImg.src = station.logo;
+            logoImg.alt = station.name;
+            logoImg.style.cssText = 'width: 60px; height: 60px; border-radius: 8px; object-fit: cover; background: #2a3a3f;';
+            logoImg.onerror = function() {
+                this.style.display = 'none';
+                logoContainer.innerHTML = '📻';
+            };
+            logoContainer.appendChild(logoImg);
+        } else {
+            logoContainer.innerHTML = '📻';
+        }
+        
+        // Build card content with inline styles to match design
+        stationCard.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div style="flex: 1;">
+                    <div style="color: #ffffff; font-size: 1em; font-weight: 500; margin-bottom: 5px;">${station.name}</div>
+                    <div style="color: #b3b3b3; font-size: 0.85em;">${station.country || ''} ${station.genre ? '• ' + station.genre : ''}</div>
+                </div>
+                <div style="color: #00d9ff; font-size: 1.2em;">▶</div>
+            </div>
+        `;
+        
+        // Insert logo container at the beginning
+        const innerDiv = stationCard.querySelector('div');
+        innerDiv.insertBefore(logoContainer, innerDiv.firstChild);
+        
+        stationCard.addEventListener('click', () => {
+            playCategoryStation(station);
+        });
+        
+        stationCard.addEventListener('mouseenter', () => {
+            stationCard.style.transform = 'translateX(5px)';
+            stationCard.style.backgroundColor = '#2a3a3f';
+        });
+        
+        stationCard.addEventListener('mouseleave', () => {
+            stationCard.style.transform = 'translateX(0)';
+            stationCard.style.backgroundColor = '';
+        });
+        
+        fragment.appendChild(stationCard);
+    });
+    
+    // Replace content all at once to avoid flickering
+    searchResults.innerHTML = '';
+    searchResults.appendChild(fragment);
+}
+
+// Play radio station from category
+async function playCategoryStation(station) {
+    if (!station || !station.url) {
+        alert('Invalid station URL');
+        return;
+    }
+    
+    try {
+        // Update player UI
+        currentStation = station; // Store current station
+        currentVideoId = null; // Clear video ID
+        nowPlayingTitle.textContent = station.name;
+        updatePageTitle(station.name); // Update page title
+        updateVideoThumbnail(null, station); // Show station logo
+        
+        // Load and play the stream
+        await loadStream(station.url);
+    } catch (error) {
+        console.error('Error playing station:', error);
+        alert(`Failed to play ${station.name}: ${error.message || 'Stream unavailable'}`);
+    }
+}
+
+// Play radio station from Radio Browser API
+async function playRadioStation(station) {
+    try {
+        let streamUrl = null;
+        
+        // IPRD stations and curated stations already have url_resolved
+        if (station.url_resolved) {
+            streamUrl = station.url_resolved;
+        } else if (station.url) {
+            streamUrl = station.url;
+        } else {
+            // Fallback to API call for Radio Browser API stations
+            const response = await fetch(`/api/radio/stream/${station.stationuuid}`);
+            if (!response.ok) {
+                throw new Error('Failed to get stream URL');
+            }
+            
+            const data = await response.json();
+            streamUrl = data.streamUrl;
+        }
+        
+        // Update player UI
+        currentStation = station; // Store current station
+        currentVideoId = null; // Clear video ID
+        nowPlayingTitle.textContent = station.name;
+        updatePageTitle(station.name); // Update page title
+        updateVideoThumbnail(null, station); // Show station logo
+        updateTabFaviconFromMedia(station, null); // Update favicon
+        
+        // Try to load and play the stream
+        try {
+            await loadStream(streamUrl);
+        } catch (streamError) {
+            console.error('Stream error:', streamError);
+            throw streamError;
+        }
+    } catch (error) {
+        console.error('Error playing station:', error);
+        alert(`Failed to play station: ${error.message}`);
+    }
+}
+
+// Back to countries handler
+if (backToCountriesBtn) {
+    backToCountriesBtn.addEventListener('click', () => {
+        stationsSection.style.display = 'none';
+        countriesSection.style.display = 'block';
+        genresSection.style.display = 'none';
+        currentCountryCode = null;
+        currentCountryName = null;
+        backToCountriesBtn.style.display = 'none';
+    });
+}
+
+// Back to genres handler
+if (backToGenresBtn) {
+    backToGenresBtn.addEventListener('click', () => {
+        genresSection.style.display = 'block';
+        stationsSection.style.display = 'none';
+        countriesSection.style.display = 'none';
+        currentGenre = null;
+        backToGenresBtn.style.display = 'none';
+    });
+}
+
+// Radio stations data
+let radioStationsData = null;
+
+// Load radio stations data
+async function loadRadioStationsData() {
+    try {
+        const response = await fetch('/radio-stations.json');
+        if (response.ok) {
+            radioStationsData = await response.json();
+        }
+    } catch (error) {
+        console.warn('Could not load radio stations data:', error);
+        radioStationsData = { news: [], sports: [], music: [], audiobooks: [], podcasts: [] };
+    }
+}
+
+// Load data on page load
+loadRadioStationsData();
+
+// Category button handlers
+const categoryButtons = document.querySelectorAll('.category-btn');
+let activeCategory = null;
+
+categoryButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+        const category = btn.getAttribute('data-category');
+        
+        // Handle international category separately
+        if (category === 'international') {
+            // Toggle active state
+            if (activeCategory === category) {
+                btn.classList.remove('active');
+                activeCategory = null;
+                countriesSection.style.display = 'none';
+                genresSection.style.display = 'none';
+                stationsSection.style.display = 'none';
+                searchResults.innerHTML = '';
+            } else {
+                // Remove active from all buttons
+                categoryButtons.forEach(b => b.classList.remove('active'));
+                
+                // Set active on clicked button
+                btn.classList.add('active');
+                activeCategory = category;
+                
+                // Hide search results and other sections
+                searchResults.innerHTML = '';
+                genresSection.style.display = 'none';
+                stationsSection.style.display = 'none';
+                
+                // Load countries
+                loadCountries();
+            }
+            return;
+        }
+        
+        // Handle music category - show genres
+        if (category === 'music') {
+            // Toggle active state
+            if (activeCategory === category) {
+                btn.classList.remove('active');
+                activeCategory = null;
+                genresSection.style.display = 'none';
+                stationsSection.style.display = 'none';
+                countriesSection.style.display = 'none';
+                searchResults.innerHTML = '';
+            } else {
+                // Remove active from all buttons
+                categoryButtons.forEach(b => b.classList.remove('active'));
+                
+                // Set active on clicked button
+                btn.classList.add('active');
+                activeCategory = category;
+                
+                // Hide search results and other sections
+                searchResults.innerHTML = '';
+                countriesSection.style.display = 'none';
+                stationsSection.style.display = 'none';
+                
+                // Load genres
+                loadMusicGenres();
+            }
+            return;
+        }
+        
+        // Handle other categories with radio stations
+        // Toggle active state
+        if (activeCategory === category) {
+            // Deselect if clicking the same category
+            btn.classList.remove('active');
+            activeCategory = null;
+            searchQueryInput.value = '';
+            // Hide sections
+            countriesSection.style.display = 'none';
+            genresSection.style.display = 'none';
+            stationsSection.style.display = 'none';
+            searchResults.innerHTML = '';
+        } else {
+            // Remove active from all buttons
+            categoryButtons.forEach(b => b.classList.remove('active'));
+            
+            // Set active on clicked button
+            btn.classList.add('active');
+            activeCategory = category;
+            
+            // Hide radio sections
+            countriesSection.style.display = 'none';
+            genresSection.style.display = 'none';
+            stationsSection.style.display = 'none';
+            
+            // Show stations for this category
+            showCategoryStations(category);
+        }
+    });
+});
+
+// Music genres list
+const musicGenres = [
+    { name: 'Pop', tag: 'pop', icon: '🎵' },
+    { name: 'Rock', tag: 'rock', icon: '🎸' },
+    { name: 'Jazz', tag: 'jazz', icon: '🎷' },
+    { name: 'Classical', tag: 'classical', icon: '🎹' },
+    { name: 'Hip Hop', tag: 'hiphop', icon: '🎤' },
+    { name: 'Electronic', tag: 'electronic', icon: '🎧' },
+    { name: 'Country', tag: 'country', icon: '🤠' },
+    { name: 'R&B', tag: 'r&b', icon: '🎙️' },
+    { name: 'Reggae', tag: 'reggae', icon: '🎼' },
+    { name: 'Metal', tag: 'metal', icon: '🤘' },
+    { name: 'Blues', tag: 'blues', icon: '🎺' },
+    { name: 'Folk', tag: 'folk', icon: '🪕' },
+    { name: 'Latin', tag: 'latin', icon: '💃' },
+    { name: 'Dance', tag: 'dance', icon: '🕺' },
+    { name: 'Indie', tag: 'indie', icon: '🎨' },
+    { name: 'Alternative', tag: 'alternative', icon: '🎪' }
+];
+
+// Load music genres
+function loadMusicGenres() {
+    if (!genresGrid) return;
+    
+    genresGrid.innerHTML = '';
+    genresSection.style.display = 'block';
+    stationsSection.style.display = 'none';
+    countriesSection.style.display = 'none';
+    
+    musicGenres.forEach(genre => {
+        const genreItem = document.createElement('div');
+        genreItem.className = 'country-item';
+        
+        const iconDiv = document.createElement('div');
+        iconDiv.className = 'country-flag';
+        iconDiv.textContent = genre.icon;
+        
+        const nameDiv = document.createElement('div');
+        nameDiv.className = 'country-name';
+        nameDiv.textContent = genre.name;
+        
+        genreItem.appendChild(iconDiv);
+        genreItem.appendChild(nameDiv);
+        
+        genreItem.addEventListener('click', () => {
+            loadStationsForGenre(genre.tag, genre.name);
+        });
+        
+        genresGrid.appendChild(genreItem);
+    });
+}
+
+// Load stations for a music genre
+async function loadStationsForGenre(genreTag, genreName) {
+    if (!stationsList || !stationsHeader) return;
+    
+    currentGenre = genreTag;
+    stationsList.innerHTML = '<div class="loading-spinner"></div>';
+    genresSection.style.display = 'none';
+    stationsSection.style.display = 'block';
+    countriesSection.style.display = 'none';
+    stationsHeader.textContent = `${genreName} Radio Stations`;
+    
+    if (backToGenresBtn) backToGenresBtn.style.display = 'block';
+    if (backToCountriesBtn) backToCountriesBtn.style.display = 'none';
+    
+    try {
+        // Search Radio Browser API for stations by tag/genre
+        const response = await fetch(
+            `https://de1.api.radio-browser.info/json/stations/search?tag=${encodeURIComponent(genreTag)}&limit=100&order=clickcount&reverse=true`,
+            {
+                headers: {
+                    'User-Agent': 'Radio App/1.0'
+                }
+            }
+        );
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const stations = await response.json();
+        displayStations(stations || []);
+    } catch (error) {
+        console.error('Error loading genre stations:', error);
+        stationsList.innerHTML = `<div class="error">Failed to load stations: ${error.message}</div>`;
+    }
+}
+
 // Create skeleton screen for search results
 function createSkeletonScreen() {
     searchResults.innerHTML = '';
@@ -1107,15 +1761,142 @@ function getVideoIdFromUrl(url) {
     return match ? match[1] : null;
 }
 
-// Update video thumbnail
-function updateVideoThumbnail(videoId) {
+// Update browser tab favicon with currently playing media
+function updateTabFavicon(logoUrl) {
+    // Remove existing favicon links to force refresh
+    const existingIcons = document.querySelectorAll("link[rel='icon'], link[rel='shortcut icon'], link[rel='apple-touch-icon']");
+    existingIcons.forEach(link => link.remove());
+    
+    if (logoUrl && isValidImageUrl(logoUrl)) {
+        // Create new favicon link
+        const faviconLink = document.createElement('link');
+        faviconLink.rel = 'icon';
+        faviconLink.type = 'image/png';
+        
+        // Add timestamp to force browser to reload (avoid caching)
+        const separator = logoUrl.includes('?') ? '&' : '?';
+        const faviconUrlWithCache = `${logoUrl}${separator}t=${Date.now()}`;
+        faviconLink.href = faviconUrlWithCache;
+        
+        // Add favicon link immediately with direct URL
+        document.head.appendChild(faviconLink);
+        
+        // Try to convert to data URL using canvas (works if CORS allows)
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        
+        img.onload = function() {
+            try {
+                // Create canvas and resize image to 32x32 for favicon
+                const canvas = document.createElement('canvas');
+                canvas.width = 32;
+                canvas.height = 32;
+                const ctx = canvas.getContext('2d');
+                
+                // Draw image on canvas (will be resized automatically)
+                ctx.drawImage(img, 0, 0, 32, 32);
+                
+                // Convert to data URL and update favicon (bypasses CORS completely)
+                const dataUrl = canvas.toDataURL('image/png');
+                faviconLink.href = dataUrl;
+            } catch (e) {
+                // Canvas conversion failed (likely CORS), keep direct URL
+            }
+        };
+        
+        img.onerror = function() {
+            // Image failed to load, direct URL already set will work
+        };
+        
+        // Start loading image for canvas conversion
+        img.src = logoUrl;
+    } else {
+        // No media playing, revert to default favicon
+        const defaultFavicon = document.createElement('link');
+        defaultFavicon.rel = 'icon';
+        defaultFavicon.href = '/favicon.ico';
+        document.head.appendChild(defaultFavicon);
+    }
+}
+
+// Update favicon based on currently playing media (station or video)
+function updateTabFaviconFromMedia(stationLogo, videoId) {
+    // Priority: stationLogo > currentStation > videoId > currentVideoId > default
+    const station = stationLogo || currentStation;
+    
+    if (station) {
+        // Get station logo from various possible fields
+        const logoUrl = station.favicon || station.logo || station.favicon_url || station.image;
+        if (logoUrl && isValidImageUrl(logoUrl)) {
+            updateTabFavicon(logoUrl);
+            return;
+        }
+    }
+    
+    // Fallback to video thumbnail
+    const vidId = videoId || currentVideoId;
+    if (vidId) {
+        // For YouTube videos, use the video thumbnail as favicon
+        const thumbnailUrl = `https://img.youtube.com/vi/${vidId}/default.jpg`;
+        updateTabFavicon(thumbnailUrl);
+        return;
+    }
+    
+    // No media playing, revert to default favicon
+    updateTabFavicon(null);
+}
+
+// Update video thumbnail or station logo
+function updateVideoThumbnail(videoId, stationLogo = null) {
     if (videoThumbnail) {
-        if (videoId) {
+        if (stationLogo) {
+            // Show station logo - check multiple possible logo fields
+            const logoUrl = stationLogo.favicon || stationLogo.logo || stationLogo.favicon_url || stationLogo.image;
+            if (logoUrl && isValidImageUrl(logoUrl)) {
+                const img = document.createElement('img');
+                img.src = logoUrl;
+                img.alt = stationLogo.name || 'Radio Station';
+                img.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
+                
+                // Handle image load errors
+                img.onerror = function() {
+                    // Fallback to emoji if image fails to load
+                    videoThumbnail.innerHTML = '<div class="thumbnail-placeholder" style="font-size: 3em;">📻</div>';
+                };
+                
+                // Clear and set image
+                videoThumbnail.innerHTML = '';
+                videoThumbnail.appendChild(img);
+            } else {
+                // Fallback to emoji if no valid logo
+                videoThumbnail.innerHTML = '<div class="thumbnail-placeholder" style="font-size: 3em;">📻</div>';
+            }
+        } else if (videoId) {
+            // Show YouTube video thumbnail
             const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
             videoThumbnail.innerHTML = `<img src="${thumbnailUrl}" alt="Video thumbnail" />`;
-    } else {
-            videoThumbnail.innerHTML = '<div class="thumbnail-placeholder">No video</div>';
+        } else {
+            // No video or station
+            videoThumbnail.innerHTML = '<div class="thumbnail-placeholder">No media</div>';
         }
+    }
+    
+    // Update browser tab favicon with currently playing media
+    updateTabFaviconFromMedia(stationLogo, videoId);
+}
+
+// Store original page title
+const originalPageTitle = document.title || 'PULSE - Your Frequency for Music & Talk';
+
+// Update page title with currently playing media
+function updatePageTitle(title) {
+    if (title) {
+        // Truncate long titles to keep page title reasonable (max 60 chars)
+        const truncatedTitle = title.length > 60 ? title.substring(0, 57) + '...' : title;
+        document.title = `${truncatedTitle} - PULSE`;
+    } else {
+        // Revert to original title when nothing is playing
+        document.title = originalPageTitle;
     }
 }
 
@@ -1129,6 +1910,10 @@ function updateNowPlayingTitle(title) {
             nowPlayingTitle.textContent = 'No track playing';
         }
     }
+    // Also update page title
+    updatePageTitle(title);
+    // Update favicon based on current media
+    updateTabFaviconFromMedia(null, null);
 }
 
 // Highlight the currently playing video in search results

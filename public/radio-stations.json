@@ -1,0 +1,1463 @@
+{
+  "news": [
+    {
+      "name": "NPR 24 Hour Program Stream",
+      "url": "https://npr-ice.streamguys1.com/live.mp3",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://media.npr.org/assets/img/2018/08/03/npr_270x270_sq-7c723c0a7a7e0aa58a22c9c25f0e37ea3c2e9c9f.png",
+      "homepage": "https://www.npr.org"
+    },
+    {
+      "name": "FOX News Talk",
+      "url": "http://23.22.214.193/foxnewsradio-foxnewsaac-ibc2?session-id=79135571&source=TuneIn",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Fox_News_Channel_logo.svg/512px-Fox_News_Channel_logo.svg.png",
+      "homepage": "https://www.foxnews.com"
+    },
+    {
+      "name": "CBS 880 AM New York",
+      "url": "http://5883.live.streamtheworld.com/WCBSAMAAC?streamtheworld_user=1&SRC=CBS&DIST=CBS&TGT=CBSLocalWebPlayer",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/200px-CBS_News_logo_%282020%29.svg.png",
+      "homepage": "https://www.cbs.com"
+    },
+    {
+      "name": "CNN CNNI Simulcast",
+      "url": "http://tunein.streamguys1.com/cnn",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/CNN.svg/512px-CNN.svg.png",
+      "homepage": "https://www.cnn.com"
+    },
+    {
+      "name": "CNN Radio USA",
+      "url": "http://crystalout.surfernetwork.com:8001/KFNX_MP3",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/CNN.svg/512px-CNN.svg.png",
+      "homepage": "https://www.cnn.com"
+    },
+    {
+      "name": "Fox LiveNOW",
+      "url": "https://fox-foxnewsnow-vizio.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Fox_News_Channel_logo.svg/512px-Fox_News_Channel_logo.svg.png",
+      "homepage": "https://fox-foxnewsnow-vizio.amagi.tv"
+    },
+    {
+      "name": "Newsmax",
+      "url": "https://newsmax-plex.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Newsmax_Media_logo.svg/512px-Newsmax_Media_logo.svg.png",
+      "homepage": "https://www.newsmax.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/Newsmax_Logo.svg/512px-Newsmax_Logo.svg.png"
+    },
+    {
+      "name": "OAN",
+      "url": "https://oan-lg.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fa/One_America_News_Network_logo.svg/512px-One_America_News_Network_logo.svg.png",
+      "homepage": "https://oan-lg.amagi.tv",
+      "favicon": "https://www.google.com/s2/favicons?domain=oan-lg.amagi.tv&sz=128"
+    },
+    {
+      "name": "USA Today News",
+      "url": "https://usatodaynews-stirr.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://www.gannett-cdn.com/sites/usatoday/images/favicon.png",
+      "homepage": "https://www.usatoday.com"
+    },
+    {
+      "name": "Fox Weather",
+      "url": "https://foxweather-amazonnews.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Fox_News_Channel_logo.svg/512px-Fox_News_Channel_logo.svg.png",
+      "homepage": "https://foxweather-amazonnews.amagi.tv"
+    },
+    {
+      "name": "Voice of America VOA",
+      "url": "http://voa-28.akacast.akamaistream.net/7/54/322040/v1/ibb.akacast.akamaistream.net/voa-28",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://www.voanews.com/Content/responsive/VOA/en-US-LEARN/img/voa-logo.png",
+      "homepage": "https://www.voanews.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=voanews.com&sz=128"
+    },
+    {
+      "name": "KIRO Seattle News",
+      "url": "https://cmg-kirobreakingnews-redbox.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://cmg-kirobreakingnews-redbox.amagi.tv",
+      "favicon": "https://www.google.com/s2/favicons?domain=cmg-kirobreakingnews-redbox.amagi.tv&sz=128"
+    },
+    {
+      "name": "WFTV News Orlando",
+      "url": "https://cmg-wftvbreakingnews-redbox.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/ABC_logo.svg/512px-ABC_logo.svg.png",
+      "homepage": "https://cmg-wftvbreakingnews-redbox.amagi.tv",
+      "favicon": "https://www.google.com/s2/favicons?domain=cmg-wftvbreakingnews-redbox.amagi.tv&sz=128"
+    },
+    {
+      "name": "WSB News Atlanta",
+      "url": "https://cmg-wsbbreakingnews-redbox.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/ABC_logo.svg/512px-ABC_logo.svg.png",
+      "homepage": "https://cmg-wsbbreakingnews-redbox.amagi.tv",
+      "favicon": "https://www.google.com/s2/favicons?domain=cmg-wsbbreakingnews-redbox.amagi.tv&sz=128"
+    },
+    {
+      "name": "Boston 25 News",
+      "url": "https://amg00327-boston-25-news-redbox.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Fox_News_Channel_logo.svg/512px-Fox_News_Channel_logo.svg.png",
+      "homepage": "https://amg00327-boston-25-news-redbox.amagi.tv"
+    },
+    {
+      "name": "KIRO Seattle Live TV",
+      "url": "https://amg00327-kiro-seattle-redbox.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://amg00327-kiro-seattle-redbox.amagi.tv",
+      "favicon": "https://www.google.com/s2/favicons?domain=amg00327-kiro-seattle-redbox.amagi.tv&sz=128"
+    },
+    {
+      "name": "WFXT News Boston",
+      "url": "https://cmg-wfxtbreakingnews-redbox.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Fox_News_Channel_logo.svg/512px-Fox_News_Channel_logo.svg.png",
+      "homepage": "https://cmg-wfxtbreakingnews-redbox.amagi.tv"
+    },
+    {
+      "name": "WJAX News Jacksonville",
+      "url": "https://cmg-wjaxbreakingnews-redbox.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/ABC_logo.svg/512px-ABC_logo.svg.png",
+      "homepage": "https://cmg-wjaxbreakingnews-redbox.amagi.tv",
+      "favicon": "https://www.google.com/s2/favicons?domain=cmg-wjaxbreakingnews-redbox.amagi.tv&sz=128"
+    },
+    {
+      "name": "WHIO News Dayton",
+      "url": "https://cmg-whiobreakingnews-redbox.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/ABC_logo.svg/512px-ABC_logo.svg.png",
+      "homepage": "https://cmg-whiobreakingnews-redbox.amagi.tv",
+      "favicon": "https://www.google.com/s2/favicons?domain=cmg-whiobreakingnews-redbox.amagi.tv&sz=128"
+    },
+    {
+      "name": "WPXI News Pittsburgh",
+      "url": "https://cmg-wpxibreakingnews-redbox.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Fox_News_Channel_logo.svg/512px-Fox_News_Channel_logo.svg.png",
+      "homepage": "https://cmg-wpxibreakingnews-redbox.amagi.tv"
+    },
+    {
+      "name": "WSOC News Charlotte",
+      "url": "https://cmg-wsocbreakingnews-redbox.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/ABC_logo.svg/512px-ABC_logo.svg.png",
+      "homepage": "https://cmg-wsocbreakingnews-redbox.amagi.tv",
+      "favicon": "https://www.google.com/s2/favicons?domain=cmg-wsocbreakingnews-redbox.amagi.tv&sz=128"
+    },
+    {
+      "name": "WHBQ News Memphis",
+      "url": "https://cmg-whbqbreakingnews-redbox.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Fox_News_Channel_logo.svg/512px-Fox_News_Channel_logo.svg.png",
+      "homepage": "https://cmg-whbqbreakingnews-redbox.amagi.tv"
+    },
+    {
+      "name": "KOKI News Tulsa",
+      "url": "https://cmg-kokibreakingnews-redbox.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Fox_News_Channel_logo.svg/512px-Fox_News_Channel_logo.svg.png",
+      "homepage": "https://cmg-kokibreakingnews-redbox.amagi.tv"
+    },
+    {
+      "name": "Black News Channel",
+      "url": "https://blacknewschannel-amazon.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/ABC_logo.svg/512px-ABC_logo.svg.png",
+      "homepage": "https://blacknewschannel-amazon.amagi.tv",
+      "favicon": "https://www.google.com/s2/favicons?domain=blacknewschannel-amazon.amagi.tv&sz=128"
+    },
+    {
+      "name": "The Recount TV",
+      "url": "https://amg01288-therecount-therecount-rokuca-mnsoe.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/512px-CBS_News_logo_%282020%29.svg.png",
+      "homepage": "https://amg01288-therecount-therecount-rokuca-mnsoe.amagi.tv",
+      "favicon": "https://www.google.com/s2/favicons?domain=amg01288-therecount-therecount-rokuca-mnsoe.amagi.tv&sz=128"
+    },
+    {
+      "name": "Salem News Channel",
+      "url": "https://snc-ono.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/512px-CBS_News_logo_%282020%29.svg.png",
+      "homepage": "https://snc-ono.amagi.tv",
+      "favicon": "https://www.google.com/s2/favicons?domain=snc-ono.amagi.tv&sz=128"
+    },
+    {
+      "name": "Atmosphere News",
+      "url": "https://atmosphere-atmosphere-news.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/512px-CBS_News_logo_%282020%29.svg.png",
+      "homepage": "https://atmosphere-atmosphere-news.amagi.tv",
+      "favicon": "https://www.google.com/s2/favicons?domain=atmosphere-atmosphere-news.amagi.tv&sz=128"
+    },
+    {
+      "name": "BBC News HD",
+      "url": "http://149.202.215.151:8080/live/home/home/676.ts",
+      "country": "UK",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/BBC_News_2019.svg/512px-BBC_News_2019.svg.png",
+      "homepage": "https://www.bbc.com"
+    },
+    {
+      "name": "Sky News HD",
+      "url": "http://149.202.215.151:8080/live/home/home/670.ts",
+      "country": "UK",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Sky_News_logo.svg/512px-Sky_News_logo.svg.png",
+      "homepage": "https://news.sky.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Sky_News_logo.svg/512px-Sky_News_logo.svg.png"
+    },
+    {
+      "name": "CNN UK",
+      "url": "http://149.202.215.151:8080/live/home/home/8713.ts",
+      "country": "UK",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/CNN.svg/512px-CNN.svg.png",
+      "homepage": "https://www.cnn.com"
+    },
+    {
+      "name": "FOX News UK",
+      "url": "http://149.202.215.151:8080/live/home/home/25843.ts",
+      "country": "UK",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Fox_News_Channel_logo.svg/512px-Fox_News_Channel_logo.svg.png",
+      "homepage": "https://www.foxnews.com"
+    },
+    {
+      "name": "FOX News US",
+      "url": "http://149.202.215.151:8080/live/home/home/25845.ts",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Fox_News_Channel_logo.svg/512px-Fox_News_Channel_logo.svg.png",
+      "homepage": "https://www.foxnews.com"
+    },
+    {
+      "name": "RTE News Now",
+      "url": "http://149.202.215.151:8080/live/home/home/12321.ts",
+      "country": "Ireland",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/RT%C3%89_logo.svg/512px-RT%C3%89_logo.svg.png",
+      "homepage": "https://www.149.202.215.151.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=149.202.215.151.com&sz=128"
+    },
+    {
+      "name": "Euronews UK",
+      "url": "http://149.202.215.151:8080/live/home/home/25841.ts",
+      "country": "UK",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Euronews_logo.svg/512px-Euronews_logo.svg.png",
+      "homepage": "https://www.149.202.215.151.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=149.202.215.151.com&sz=128"
+    },
+    {
+      "name": "NHK World News",
+      "url": "http://149.202.215.151:8080/live/home/home/25842.ts",
+      "country": "Japan",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/NHK_logo.svg/512px-NHK_logo.svg.png",
+      "homepage": "https://www.149.202.215.151.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=149.202.215.151.com&sz=128"
+    },
+    {
+      "name": "ABC News HD",
+      "url": "http://149.202.215.151:8080/live/home/home/19219.ts",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/ABC_logo.svg/512px-ABC_logo.svg.png",
+      "homepage": "https://abcnews.go.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/50/ABC_%282013%29_Dark_Grey.svg/512px-ABC_%282013%29_Dark_Grey.svg.png"
+    },
+    {
+      "name": "CNN HD",
+      "url": "http://149.202.215.151:8080/live/home/home/19209.ts",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/CNN.svg/512px-CNN.svg.png",
+      "homepage": "https://www.cnn.com"
+    },
+    {
+      "name": "CNBC HD",
+      "url": "http://149.202.215.151:8080/live/home/home/19210.ts",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/94/CNBC_logo.svg/512px-CNBC_logo.svg.png",
+      "homepage": "https://www.nbc.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/NBC_logo.svg/512px-NBC_logo.svg.png"
+    },
+    {
+      "name": "Bloomberg HD",
+      "url": "http://149.202.215.151:8080/live/home/home/5526.ts",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/34/Bloomberg_logo.svg/512px-Bloomberg_logo.svg.png",
+      "homepage": "https://www.149.202.215.151.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Bloomberg_logo.svg/512px-Bloomberg_logo.svg.png"
+    },
+    {
+      "name": "C-SPAN 1 HD",
+      "url": "http://149.202.215.151:8080/live/home/home/5676.ts",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1d/C-SPAN_logo.svg/512px-C-SPAN_logo.svg.png",
+      "homepage": "https://www.149.202.215.151.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=149.202.215.151.com&sz=128"
+    },
+    {
+      "name": "NBC News NOW",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/5df97894467dfa00091c873c/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c2a5101-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=f97284ae-c6d0-447a-b3ee-5be284830e0b&serverSideAds=false",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://www.nbc.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/NBC_logo.svg/512px-NBC_logo.svg.png"
+    },
+    {
+      "name": "NBC New York News",
+      "url": "https://nbcu-nbcnewyorknews-firetv.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://www.nbc.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/NBC_logo.svg/512px-NBC_logo.svg.png"
+    },
+    {
+      "name": "NBC Los Angeles News",
+      "url": "https://nbcu-nbclosangelesnews-firetv.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://www.nbc.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/NBC_logo.svg/512px-NBC_logo.svg.png"
+    },
+    {
+      "name": "NBC Chicago News",
+      "url": "https://nbcu-nbcchicagonews-firetv.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://www.nbc.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/NBC_logo.svg/512px-NBC_logo.svg.png"
+    },
+    {
+      "name": "NBC Philadelphia News",
+      "url": "https://nbcu-nbcphiladelphianews-firetv.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://www.nbc.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/NBC_logo.svg/512px-NBC_logo.svg.png"
+    },
+    {
+      "name": "NBC Boston News",
+      "url": "https://nbcu-nbcbostonnews-firetv.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://www.nbc.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/NBC_logo.svg/512px-NBC_logo.svg.png"
+    },
+    {
+      "name": "NBC Washington News",
+      "url": "https://nbcu-nbcwashingtonnews-firetv.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://www.nbc.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/NBC_logo.svg/512px-NBC_logo.svg.png"
+    },
+    {
+      "name": "NBC Dallas Fort Worth News",
+      "url": "https://nbcu-nbcdallasfortworthnews-firetv.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://www.nbc.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/NBC_logo.svg/512px-NBC_logo.svg.png"
+    },
+    {
+      "name": "NBC San Francisco News",
+      "url": "https://nbcu-nbcsanfrancisconews-firetv.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://www.nbc.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/NBC_logo.svg/512px-NBC_logo.svg.png"
+    },
+    {
+      "name": "NBC San Diego News",
+      "url": "https://nbcu-nbcsandiegonews-firetv.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://www.nbc.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/NBC_logo.svg/512px-NBC_logo.svg.png"
+    },
+    {
+      "name": "NBC Connecticut News",
+      "url": "https://nbcu-nbcconnecticutnews-firetv.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://www.nbc.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/NBC_logo.svg/512px-NBC_logo.svg.png"
+    },
+    {
+      "name": "NBC South Florida News",
+      "url": "https://nbcu-nbcsouthfloridanews-firetv.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://www.nbc.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/NBC_logo.svg/512px-NBC_logo.svg.png"
+    },
+    {
+      "name": "CBS News 24/7",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/5a6b92f6e22a617379789618/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c276ad5-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=36903a12-54e9-4279-a247-c026f64396a8&serverSideAds=false",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/512px-CBS_News_logo_%282020%29.svg.png",
+      "homepage": "https://www.cbs.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/200px-CBS_News_logo_%282020%29.svg.png"
+    },
+    {
+      "name": "CBS News Los Angeles",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/5dc9b875e280c80009a8a44a/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c2791e5-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&serverSideAds=false&sid=a612bd7b-6a41-4c05-aebf-59ac30d6018b",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/512px-CBS_News_logo_%282020%29.svg.png",
+      "homepage": "https://www.cbs.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/200px-CBS_News_logo_%282020%29.svg.png"
+    },
+    {
+      "name": "CBS News Miami",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/60fb299b79498900070b29e0/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c2791e6-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&serverSideAds=false&sid=0f5951e3-be83-4440-8784-62a52e09b81b",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/512px-CBS_News_logo_%282020%29.svg.png",
+      "homepage": "https://www.cbs.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/200px-CBS_News_logo_%282020%29.svg.png"
+    },
+    {
+      "name": "CBS News Philadelphia",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/5eb1b05ea168cc000767ba67/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c27b8f0-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=a12d4db0-b63f-41f2-8f0d-d4faab762d0a&serverSideAds=false",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/512px-CBS_News_logo_%282020%29.svg.png",
+      "homepage": "https://www.cbs.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/200px-CBS_News_logo_%282020%29.svg.png"
+    },
+    {
+      "name": "CBS News Pittsburgh",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/5eb1b17aa5277e00083f6521/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c27b8f1-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=b0e061b0-8217-4bae-9a09-61f828338bbc&serverSideAds=false",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/512px-CBS_News_logo_%282020%29.svg.png",
+      "homepage": "https://www.cbs.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/200px-CBS_News_logo_%282020%29.svg.png"
+    },
+    {
+      "name": "CBS News Sacramento",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/60cb6df2b2ad610008cd5bea/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c27b8f2-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&serverSideAds=false&sid=d09dee4f-4202-48bd-b577-6544af5864e1",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/512px-CBS_News_logo_%282020%29.svg.png",
+      "homepage": "https://www.cbs.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/200px-CBS_News_logo_%282020%29.svg.png"
+    },
+    {
+      "name": "CBS News Texas",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/5eceb0d4065c240007688ec6/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c27b8f4-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&serverSideAds=false&sid=870d3aac-da79-4239-a021-82bea2a622d2",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/512px-CBS_News_logo_%282020%29.svg.png",
+      "homepage": "https://www.cbs.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/200px-CBS_News_logo_%282020%29.svg.png"
+    },
+    {
+      "name": "CBS News Spotlight",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/60fb321ee99fac0008c9ab8a/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c27b8f3-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=22a52ebf-8b3c-42d6-b9f8-8b8019b998c9&serverSideAds=false",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/512px-CBS_News_logo_%282020%29.svg.png",
+      "homepage": "https://www.cbs.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/200px-CBS_News_logo_%282020%29.svg.png"
+    },
+    {
+      "name": "ABC News Live",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/6508be683a0d700008c534e4/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c265962-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=99b21a01-5948-4846-8087-2fee1b5f0a3d&serverSideAds=false",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/ABC_logo.svg/512px-ABC_logo.svg.png",
+      "homepage": "https://abcnews.go.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/50/ABC_%282013%29_Dark_Grey.svg/512px-ABC_%282013%29_Dark_Grey.svg.png"
+    },
+    {
+      "name": "BBC News",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/65d92a8c8b24c80008e285c0/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c26f5a2-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=9f1a48db-9022-43d1-bb25-ba665285192f&serverSideAds=false",
+      "country": "UK",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/BBC_News_2019.svg/512px-BBC_News_2019.svg.png",
+      "homepage": "https://www.bbc.com"
+    },
+    {
+      "name": "BBC News North America",
+      "url": "https://fl3.moveonjoy.com/BBC_WORLD_NEWS/index.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/BBC_News_2019.svg/512px-BBC_News_2019.svg.png",
+      "homepage": "https://www.bbc.com"
+    },
+    {
+      "name": "Fox News Channel",
+      "url": "https://news.codeautoplaycdn1.workers.dev/?channel=foxnewschannel&codeby=nd",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Fox_News_Channel_logo.svg/512px-Fox_News_Channel_logo.svg.png",
+      "homepage": "https://www.foxnews.com"
+    },
+    {
+      "name": "Newsmax",
+      "url": "https://nmxlive.akamaized.net/hls/live/529965/Live_1/index.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Newsmax_Media_logo.svg/512px-Newsmax_Media_logo.svg.png",
+      "homepage": "https://www.newsmax.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/Newsmax_Logo.svg/512px-Newsmax_Logo.svg.png"
+    },
+    {
+      "name": "Newsy",
+      "url": "https://linear-460.frequency.stream/dist/vix/460/hls/master/playlist.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Newsy_2021.svg/512px-Newsy_2021.svg.png",
+      "homepage": "https://www.newsy.com"
+    },
+    {
+      "name": "News Nation",
+      "url": "https://fl3.moveonjoy.com/NEWS_NATION/index.m3u8",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d6/NewsNation_logo.svg/512px-NewsNation_logo.svg.png",
+      "homepage": "https://www.newsnationnow.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Fox_News_Channel_logo.svg/512px-Fox_News_Channel_logo.svg.png"
+    },
+    {
+      "name": "News 12 New York",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/5fff49cfb5cd4f0007c2b0dc/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c2a5103-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&serverSideAds=false&sid=c438c5e4-4d4e-4037-8b44-c6782c44b796",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://www.cfd-v4-service-channel-stitcher-use1-1.prd.pluto.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Fox_News_Channel_logo.svg/512px-Fox_News_Channel_logo.svg.png"
+    },
+    {
+      "name": "Sky News",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/55b285cd2665de274553d66f/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c2bb092-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=7161f04a-ca8e-48a5-ba86-50e1f09b73b7&serverSideAds=false",
+      "country": "UK",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Sky_News_logo.svg/512px-Sky_News_logo.svg.png",
+      "homepage": "https://news.sky.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Sky_News_logo.svg/512px-Sky_News_logo.svg.png"
+    },
+    {
+      "name": "Euronews",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/60492dcf1c9b6a00089f41df/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c28a357-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=fa72d986-0119-4efe-aab7-e87e09aafd24&serverSideAds=false",
+      "country": "International",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/Euronews_logo.svg/512px-Euronews_logo.svg.png",
+      "homepage": "https://www.cfd-v4-service-channel-stitcher-use1-1.prd.pluto.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=cfd-v4-service-channel-stitcher-use1-1.prd.pluto.com&sz=128"
+    },
+    {
+      "name": "Pluto TV News",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/5268abcd0ce20a8472000114/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c2b1454-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=40ed281a-4df6-4951-8bc0-abfa19c88be3&serverSideAds=false",
+      "country": "USA",
+      "genre": "News",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Pluto_TV_logo.svg/512px-Pluto_TV_logo.svg.png",
+      "homepage": "https://www.cfd-v4-service-channel-stitcher-use1-1.prd.pluto.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=cfd-v4-service-channel-stitcher-use1-1.prd.pluto.com&sz=128"
+    }
+  ],
+  "sports": [
+    {
+      "name": "Bein Sports",
+      "url": "https://redbox-beinsports-xumo.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/en/thumb/5/5c/BeIN_Sports_logo.svg/512px-BeIN_Sports_logo.svg.png",
+      "homepage": "https://www.beinsports.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=beinsports.com&sz=128"
+    },
+    {
+      "name": "Bein Sports Xtra",
+      "url": "https://bein-xtra-roku-us.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/en/thumb/5/5c/BeIN_Sports_logo.svg/512px-BeIN_Sports_logo.svg.png",
+      "homepage": "https://www.beinsports.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=beinsports.com&sz=128"
+    },
+    {
+      "name": "SportsGrid",
+      "url": "https://sportsgrid-plex.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/512px-CBS_News_logo_%282020%29.svg.png",
+      "homepage": "https://www.sportsgrid.com",
+      "favicon": "https://www.sportsgrid.com/favicon.ico"
+    },
+    {
+      "name": "Racing America",
+      "url": "https://racingamerica-plex.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/512px-CBS_News_logo_%282020%29.svg.png",
+      "homepage": "https://racingamerica-plex.amagi.tv",
+      "favicon": "https://racingamerica.com/favicon.ico"
+    },
+    {
+      "name": "EDGEsport TV",
+      "url": "https://edgesport-samsungus.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://edgesport-samsungus.amagi.tv",
+      "favicon": "https://www.edgesport.tv/favicon.ico"
+    },
+    {
+      "name": "Pac12 Sports TV",
+      "url": "https://pac12-localnow.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://pac12-localnow.amagi.tv",
+      "favicon": "https://pac-12.com/favicon.ico"
+    },
+    {
+      "name": "Players TV",
+      "url": "https://playerstv-roku-us.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ESPN_logo.svg/512px-ESPN_logo.svg.png",
+      "homepage": "https://playerstv-roku-us.amagi.tv",
+      "favicon": "https://playerstv.com/favicon.ico"
+    },
+    {
+      "name": "USA Today Sports",
+      "url": "https://usatodaysports-stirr.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/be/USA_Today_logo.svg/512px-USA_Today_logo.svg.png",
+      "homepage": "https://www.usatoday.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=usatoday.com&sz=128"
+    },
+    {
+      "name": "ESPN Radio",
+      "url": "https://espn-lh.akamaihd.net/i/espnradio_1@122830/master.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ESPN_logo.svg/512px-ESPN_logo.svg.png",
+      "homepage": "https://www.espn.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ESPN_wordmark.svg/512px-ESPN_wordmark.svg.png"
+    },
+    {
+      "name": "CBS Sports Radio",
+      "url": "https://playerservices.streamtheworld.com/api/livestream-redirect/CBSSPORTSRADIO.mp3",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fc/CBS_logo_%282020%29.svg/512px-CBS_logo_%282020%29.svg.png",
+      "homepage": "https://www.cbs.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/200px-CBS_News_logo_%282020%29.svg.png"
+    },
+    {
+      "name": "Combat GO Martial Arts TV",
+      "url": "https://combatgo-stirr.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://combatgo-stirr.amagi.tv",
+      "favicon": "https://combatgo.com/favicon.ico"
+    },
+    {
+      "name": "HNC Sports",
+      "url": "https://hncfree-samsung-uk.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ESPN_logo.svg/512px-ESPN_logo.svg.png",
+      "homepage": "https://hncfree-samsung-uk.amagi.tv",
+      "favicon": "https://www.google.com/s2/favicons?domain=hncfree-samsung-uk.amagi.tv&sz=128"
+    },
+    {
+      "name": "MMA TV",
+      "url": "https://alchimie-mmatv-samsung.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://alchimie-mmatv-samsung.amagi.tv",
+      "favicon": "https://www.mmatv.com/favicon.ico"
+    },
+    {
+      "name": "Origin Sports",
+      "url": "https://raycoms-originsports.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ESPN_logo.svg/512px-ESPN_logo.svg.png",
+      "homepage": "https://raycoms-originsports.amagi.tv",
+      "favicon": "https://originsports.com/favicon.ico"
+    },
+    {
+      "name": "Tennis Channel",
+      "url": "https://tennischannel-intl-samsung-uk.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://tennischannel-intl-samsung-uk.amagi.tv",
+      "favicon": "https://www.tennischannel.com/favicon.ico"
+    },
+    {
+      "name": "Trace Sportstars",
+      "url": "https://trace-sportstars-tcl.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ESPN_logo.svg/512px-ESPN_logo.svg.png",
+      "homepage": "https://trace-sportstars-tcl.amagi.tv",
+      "favicon": "https://www.trace.tv/favicon.ico"
+    },
+    {
+      "name": "Whistle Sports TV",
+      "url": "https://whistletv-tcl.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ESPN_logo.svg/512px-ESPN_logo.svg.png",
+      "homepage": "https://whistletv-tcl.amagi.tv",
+      "favicon": "https://whistlesports.com/favicon.ico"
+    },
+    {
+      "name": "Campus Loresports",
+      "url": "https://naviofequency-campusloresports.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ESPN_logo.svg/512px-ESPN_logo.svg.png",
+      "homepage": "https://naviofequency-campusloresports.amagi.tv",
+      "favicon": "https://campuslore.com/favicon.ico"
+    },
+    {
+      "name": "Sky Sports News HD",
+      "url": "http://149.202.215.151:8080/live/home/home/586.ts",
+      "country": "UK",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Sky_Sports_logo.svg/512px-Sky_Sports_logo.svg.png",
+      "homepage": "https://www.skysports.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Sky_News_logo.svg/512px-Sky_News_logo.svg.png"
+    },
+    {
+      "name": "Sky Sports Main Events HD",
+      "url": "http://149.202.215.151:8080/live/home/home/585.ts",
+      "country": "UK",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Sky_Sports_logo.svg/512px-Sky_Sports_logo.svg.png",
+      "homepage": "https://www.skysports.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Sky_News_logo.svg/512px-Sky_News_logo.svg.png"
+    },
+    {
+      "name": "Sky Sports Premier League HD",
+      "url": "http://149.202.215.151:8080/live/home/home/581.ts",
+      "country": "UK",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Sky_Sports_logo.svg/512px-Sky_Sports_logo.svg.png",
+      "homepage": "https://www.skysports.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Sky_News_logo.svg/512px-Sky_News_logo.svg.png"
+    },
+    {
+      "name": "Sky Sports Football HD",
+      "url": "http://149.202.215.151:8080/live/home/home/32742.ts",
+      "country": "UK",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Sky_Sports_logo.svg/512px-Sky_Sports_logo.svg.png",
+      "homepage": "https://www.skysports.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Sky_News_logo.svg/512px-Sky_News_logo.svg.png"
+    },
+    {
+      "name": "Sky Sports Cricket HD",
+      "url": "http://149.202.215.151:8080/live/home/home/584.ts",
+      "country": "UK",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Sky_Sports_logo.svg/512px-Sky_Sports_logo.svg.png",
+      "homepage": "https://www.skysports.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Sky_News_logo.svg/512px-Sky_News_logo.svg.png"
+    },
+    {
+      "name": "Sky Sports Golf HD",
+      "url": "http://149.202.215.151:8080/live/home/home/582.ts",
+      "country": "UK",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Sky_Sports_logo.svg/512px-Sky_Sports_logo.svg.png",
+      "homepage": "https://www.skysports.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Sky_News_logo.svg/512px-Sky_News_logo.svg.png"
+    },
+    {
+      "name": "Sky Sports F1 HD",
+      "url": "http://149.202.215.151:8080/live/home/home/580.ts",
+      "country": "UK",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Sky_Sports_logo.svg/512px-Sky_Sports_logo.svg.png",
+      "homepage": "https://www.skysports.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Sky_News_logo.svg/512px-Sky_News_logo.svg.png"
+    },
+    {
+      "name": "Sky Sports Action HD",
+      "url": "http://149.202.215.151:8080/live/home/home/583.ts",
+      "country": "UK",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Sky_Sports_logo.svg/512px-Sky_Sports_logo.svg.png",
+      "homepage": "https://www.skysports.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Sky_News_logo.svg/512px-Sky_News_logo.svg.png"
+    },
+    {
+      "name": "BT Sport 1 HD",
+      "url": "http://149.202.215.151:8080/live/home/home/12126.ts",
+      "country": "UK",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/BT_Group_logo.svg/512px-BT_Group_logo.svg.png",
+      "homepage": "https://www.bt.com/sport",
+      "favicon": "https://www.google.com/s2/favicons?domain=bt.com&sz=128"
+    },
+    {
+      "name": "BT Sport 2 HD",
+      "url": "http://149.202.215.151:8080/live/home/home/572.ts",
+      "country": "UK",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/BT_Group_logo.svg/512px-BT_Group_logo.svg.png",
+      "homepage": "https://www.bt.com/sport",
+      "favicon": "https://www.google.com/s2/favicons?domain=bt.com&sz=128"
+    },
+    {
+      "name": "BT Sport 3 HD",
+      "url": "http://149.202.215.151:8080/live/home/home/4931.ts",
+      "country": "UK",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/BT_Group_logo.svg/512px-BT_Group_logo.svg.png",
+      "homepage": "https://www.bt.com/sport",
+      "favicon": "https://www.google.com/s2/favicons?domain=bt.com&sz=128"
+    },
+    {
+      "name": "BT Sport ESPN HD",
+      "url": "http://149.202.215.151:8080/live/home/home/12123.ts",
+      "country": "UK",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ESPN_logo.svg/512px-ESPN_logo.svg.png",
+      "homepage": "https://www.espn.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ESPN_wordmark.svg/512px-ESPN_wordmark.svg.png"
+    },
+    {
+      "name": "Eurosport HD",
+      "url": "http://149.202.215.151:8080/live/home/home/11002.ts",
+      "country": "UK",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Eurosport_logo.svg/512px-Eurosport_logo.svg.png",
+      "homepage": "https://www.eurosport.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=eurosport.com&sz=128"
+    },
+    {
+      "name": "Eurosport 2 HD",
+      "url": "http://149.202.215.151:8080/live/home/home/11003.ts",
+      "country": "UK",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Eurosport_logo.svg/512px-Eurosport_logo.svg.png",
+      "homepage": "https://www.eurosport.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=eurosport.com&sz=128"
+    },
+    {
+      "name": "Premier Sports HD",
+      "url": "http://149.202.215.151:8080/live/home/home/568.ts",
+      "country": "UK",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ESPN_logo.svg/512px-ESPN_logo.svg.png",
+      "homepage": "https://www.149.202.215.151.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=149.202.215.151.com&sz=128"
+    },
+    {
+      "name": "Racing UK HD",
+      "url": "http://149.202.215.151:8080/live/home/home/560.ts",
+      "country": "UK",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://www.149.202.215.151.com",
+      "favicon": "https://racingamerica.com/favicon.ico"
+    },
+    {
+      "name": "MUTV HD",
+      "url": "http://149.202.215.151:8080/live/home/home/12398.ts",
+      "country": "UK",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://www.149.202.215.151.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=149.202.215.151.com&sz=128"
+    },
+    {
+      "name": "Liverpool FC TV HD",
+      "url": "http://149.202.215.151:8080/live/home/home/12120.ts",
+      "country": "UK",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0c/Liverpool_FC.svg/512px-Liverpool_FC.svg.png",
+      "homepage": "https://www.149.202.215.151.com"
+    },
+    {
+      "name": "Chelsea TV",
+      "url": "http://149.202.215.151:8080/live/home/home/8528.ts",
+      "country": "UK",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/en/thumb/c/cc/Chelsea_FC.svg/512px-Chelsea_FC.svg.png",
+      "homepage": "https://www.149.202.215.151.com"
+    },
+    {
+      "name": "Motorsport TV",
+      "url": "http://149.202.215.151:8080/live/home/home/12170.ts",
+      "country": "UK",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ESPN_logo.svg/512px-ESPN_logo.svg.png",
+      "homepage": "https://www.149.202.215.151.com",
+      "favicon": "https://www.motorsport.tv/favicon.ico"
+    },
+    {
+      "name": "At The Races",
+      "url": "http://149.202.215.151:8080/live/home/home/150.ts",
+      "country": "UK",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://www.149.202.215.151.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c4/Fuse_TV_logo.svg/512px-Fuse_TV_logo.svg.png"
+    },
+    {
+      "name": "EIR Sports 1",
+      "url": "http://149.202.215.151:8080/live/home/home/11535.ts",
+      "country": "Ireland",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/RT%C3%89_logo.svg/512px-RT%C3%89_logo.svg.png",
+      "homepage": "https://www.149.202.215.151.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=149.202.215.151.com&sz=128"
+    },
+    {
+      "name": "EIR Sports 2 HD",
+      "url": "http://149.202.215.151:8080/live/home/home/11536.ts",
+      "country": "Ireland",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/RT%C3%89_logo.svg/512px-RT%C3%89_logo.svg.png",
+      "homepage": "https://www.149.202.215.151.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=149.202.215.151.com&sz=128"
+    },
+    {
+      "name": "Redbull TV HD",
+      "url": "http://149.202.215.151:8080/live/home/home/30321.ts",
+      "country": "International",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/Red_Bull_logo.svg/512px-Red_Bull_logo.svg.png",
+      "homepage": "https://www.149.202.215.151.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=149.202.215.151.com&sz=128"
+    },
+    {
+      "name": "CBS Sports HQ",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/5e9f2c05172a0f0007db4786/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c27b8f5-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=3a15356b-8467-4ae7-b2f6-9c8467fcf41d&serverSideAds=false",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fc/CBS_logo_%282020%29.svg/512px-CBS_logo_%282020%29.svg.png",
+      "homepage": "https://www.cbs.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/200px-CBS_News_logo_%282020%29.svg.png"
+    },
+    {
+      "name": "CBS Sports Network USA",
+      "url": "https://fl3.moveonjoy.com/CBS_SPORTS_NETWORK/index.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fc/CBS_logo_%282020%29.svg/512px-CBS_logo_%282020%29.svg.png",
+      "homepage": "https://www.cbs.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/200px-CBS_News_logo_%282020%29.svg.png"
+    },
+    {
+      "name": "ESPN U",
+      "url": "https://fl3.moveonjoy.com/ESPN_U/index.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ESPN_logo.svg/512px-ESPN_logo.svg.png",
+      "homepage": "https://www.espn.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ESPN_wordmark.svg/512px-ESPN_wordmark.svg.png"
+    },
+    {
+      "name": "ESPNews",
+      "url": "https://fl3.moveonjoy.com/ESPN_NEWS/index.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/ESPNews.svg/512px-ESPNews.svg.png",
+      "homepage": "https://www.espn.com"
+    },
+    {
+      "name": "FOX Sports",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/5a74b8e1e22a61737979c6bf/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c28f173-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&serverSideAds=false&sid=46a3b8ff-5a4a-4952-bb4d-9461224acd54",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6c/Fox_Sports_logo.svg/512px-Fox_Sports_logo.svg.png",
+      "homepage": "https://www.foxsports.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Fox_News_Channel_logo.svg/512px-Fox_News_Channel_logo.svg.png"
+    },
+    {
+      "name": "Fox Sports 1",
+      "url": "https://fl3.moveonjoy.com/FOX_Sports_1/index.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6c/Fox_Sports_logo.svg/512px-Fox_Sports_logo.svg.png",
+      "homepage": "https://www.foxsports.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Fox_News_Channel_logo.svg/512px-Fox_News_Channel_logo.svg.png"
+    },
+    {
+      "name": "Fox Sports 2",
+      "url": "http://fl2.moveonjoy.com/FOX_Sports_2/index.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6c/Fox_Sports_logo.svg/512px-Fox_Sports_logo.svg.png",
+      "homepage": "https://www.foxsports.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Fox_News_Channel_logo.svg/512px-Fox_News_Channel_logo.svg.png"
+    },
+    {
+      "name": "Fox Sports en Espanol",
+      "url": "https://lnc-fox-sports-espanol2.tubi.video/index.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6c/Fox_Sports_logo.svg/512px-Fox_Sports_logo.svg.png",
+      "homepage": "https://www.foxsports.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Fox_News_Channel_logo.svg/512px-Fox_News_Channel_logo.svg.png"
+    },
+    {
+      "name": "NBC Sports",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/6549306c83595c000815a696/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c2a5102-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&serverSideAds=false&sid=21e31328-eadb-4828-8608-0cc14ce24586",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://www.nbc.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/NBC_logo.svg/512px-NBC_logo.svg.png"
+    },
+    {
+      "name": "NBA TV",
+      "url": "https://fl3.moveonjoy.com/NBA_TV/index.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/NBA_Logo.svg/512px-NBA_Logo.svg.png",
+      "homepage": "https://www.nba.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=nba.com&sz=128"
+    },
+    {
+      "name": "NFL Channel",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/5ced7d5df64be98e07ed47b6/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c2a5105-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&serverSideAds=false&sid=6477ef85-3680-442c-94d8-27197903b1f6",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/NFL_logo.svg/512px-NFL_logo.svg.png",
+      "homepage": "https://www.nfl.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=nfl.com&sz=128"
+    },
+    {
+      "name": "NFL RedZone",
+      "url": "https://fl1.moveonjoy.com/NFL_RedZone/index.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/NFL_logo.svg/512px-NFL_logo.svg.png",
+      "homepage": "https://www.nfl.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=nfl.com&sz=128"
+    },
+    {
+      "name": "BeIN SPORTS XTRA",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/5df975e2b27cf5000921c102/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c26f5a4-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&serverSideAds=false&sid=cb932046-e001-4189-a871-1376aa2ec340",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/en/thumb/5/5c/BeIN_Sports_logo.svg/512px-BeIN_Sports_logo.svg.png",
+      "homepage": "https://www.beinsports.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=beinsports.com&sz=128"
+    },
+    {
+      "name": "BeIN SPORTS XTRA En Espanol",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/60492fdd9989d30007ccd30a/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c26f5a5-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&serverSideAds=false&sid=5f89b39e-273a-43e4-8664-6b0d3d3b0fef",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/en/thumb/5/5c/BeIN_Sports_logo.svg/512px-BeIN_Sports_logo.svg.png",
+      "homepage": "https://www.beinsports.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=beinsports.com&sz=128"
+    },
+    {
+      "name": "BeIN Sports XTRA",
+      "url": "https://bein-beinxtrasports-firetv.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/en/thumb/5/5c/BeIN_Sports_logo.svg/512px-BeIN_Sports_logo.svg.png",
+      "homepage": "https://www.beinsports.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=beinsports.com&sz=128"
+    },
+    {
+      "name": "Pluto TV Sports",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/56340779a738201b4ccfeac9/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c2b3b63-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&serverSideAds=false&sid=8673a43c-58ba-48b3-8db5-75986abb01b9",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Pluto_TV_logo.svg/512px-Pluto_TV_logo.svg.png",
+      "homepage": "https://www.cfd-v4-service-channel-stitcher-use1-1.prd.pluto.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=cfd-v4-service-channel-stitcher-use1-1.prd.pluto.com&sz=128"
+    },
+    {
+      "name": "GolfPass",
+      "url": "http://cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv/stitch/hls/channel/65493029ab052400089e9d2f/master.m3u8?appName=web&appVersion=unknown&clientTime=0&deviceDNT=0&deviceId=6c291881-30d3-11ef-9cf5-e9ddff8ff496&deviceMake=Chrome&deviceModel=web&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&serverSideAds=false&sid=fc355a72-e401-4038-a2fd-7378aedc3a6f",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/NBC_logo.svg/512px-NBC_logo.svg.png",
+      "homepage": "https://www.cfd-v4-service-channel-stitcher-use1-1.prd.pluto.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=cfd-v4-service-channel-stitcher-use1-1.prd.pluto.com&sz=128"
+    },
+    {
+      "name": "FanDuel Sports Network",
+      "url": "https://fl3.moveonjoy.com/PAC_12/index.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/94/FanDuel_Sports_Network_logo.svg/512px-FanDuel_Sports_Network_logo.svg.png",
+      "homepage": "https://www.fl3.moveonjoy.com"
+    },
+    {
+      "name": "USA Today SportsWire",
+      "url": "https://lnc-sportswire.tubi.video/playlist.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/be/USA_Today_logo.svg/512px-USA_Today_logo.svg.png",
+      "homepage": "https://www.usatoday.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=usatoday.com&sz=128"
+    },
+    {
+      "name": "MAVTV Motor Sports",
+      "url": "https://84f081227bc1418984b9e3dcaa985b2b.mediatailor.us-east-1.amazonaws.com/v1/master/44f73ba4d03e9607dcd9bebdcb8494d86964f1d8/Samsung-in_MAVTVMotorSportsNetwork/playlist.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/CBS_News_logo_%282020%29.svg/512px-CBS_News_logo_%282020%29.svg.png",
+      "homepage": "https://www.84f081227bc1418984b9e3dcaa985b2b.mediatailor.us-east-1.amazonaws.com",
+      "favicon": "https://www.mavtv.com/favicon.ico"
+    },
+    {
+      "name": "DAZN Womens Football",
+      "url": "https://lnc-dazn-womens-football.tubi.video/playlist.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Fox_News_Channel_logo.svg/512px-Fox_News_Channel_logo.svg.png",
+      "homepage": "https://www.lnc-dazn-womens-football.tubi.video.com"
+    },
+    {
+      "name": "30A Golf Kingdom",
+      "url": "https://30a-tv.com/feeds/vidaa/golf.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://30a-tv.com/favicon.ico",
+      "homepage": "https://www.30a-tv.com"
+    },
+    {
+      "name": "Fútbol",
+      "url": "https://dai.google.com/linear/hls/event/JgYgVMW8Szinkmm7dchlmQ/master.m3u8",
+      "country": "USA",
+      "genre": "Sports",
+      "logo": "https://www.google.com/favicon.ico",
+      "homepage": "https://www.dai.google.com"
+    }
+  ],
+  "music": [
+    {
+      "name": "Fuse Backstage",
+      "url": "https://fuse-backstage-roku.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Music",
+      "homepage": "https://www.fuse.tv",
+      "logo": "https://www.google.com/s2/favicons?domain=fuse.tv&sz=128"
+    },
+    {
+      "name": "Fuse Beats",
+      "url": "https://fuse-beats-roku.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Music",
+      "homepage": "https://www.fuse.tv",
+      "logo": "https://www.google.com/s2/favicons?domain=fuse.tv&sz=128"
+    },
+    {
+      "name": "Fuse XL",
+      "url": "https://fusexl-plex.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Music",
+      "homepage": "https://www.fuse.tv",
+      "logo": "https://www.google.com/s2/favicons?domain=fuse.tv&sz=128"
+    },
+    {
+      "name": "Circle Country Music",
+      "url": "https://circle-samsung.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Music",
+      "homepage": "https://circle-samsung.amagi.tv",
+      "logo": "https://www.google.com/s2/favicons?domain=circle-samsung.amagi.tv&sz=128",
+      "favicon": "https://www.circleallaccess.com/favicon.ico"
+    },
+    {
+      "name": "Now 70s Music",
+      "url": "https://lightningnow70-samsungau.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Music",
+      "homepage": "https://lightningnow70-samsungau.amagi.tv",
+      "logo": "https://www.google.com/s2/favicons?domain=lightningnow70-samsungau.amagi.tv&sz=128"
+    },
+    {
+      "name": "Now 80s Music",
+      "url": "https://lightningnow80-samsungau.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Music",
+      "homepage": "https://lightningnow80-samsungau.amagi.tv",
+      "logo": "https://www.google.com/s2/favicons?domain=lightningnow80-samsungau.amagi.tv&sz=128"
+    },
+    {
+      "name": "Now 90s Music",
+      "url": "https://lightningnow90-samsungau.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Music",
+      "homepage": "https://lightningnow90-samsungau.amagi.tv",
+      "logo": "https://www.google.com/s2/favicons?domain=lightningnow90-samsungau.amagi.tv&sz=128"
+    },
+    {
+      "name": "Qwest Classical Music",
+      "url": "https://qwest-classic-plex.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Music",
+      "homepage": "https://www.qwest.com",
+      "logo": "https://www.google.com/s2/favicons?domain=qwest.com&sz=128"
+    },
+    {
+      "name": "Qwest Jazz Music",
+      "url": "https://qwest-jazz-plex.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Music",
+      "homepage": "https://www.qwest.com",
+      "logo": "https://www.google.com/s2/favicons?domain=qwest.com&sz=128"
+    },
+    {
+      "name": "Qwest Mix Music",
+      "url": "https://qwest-mix-plex.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Music",
+      "homepage": "https://www.qwest.com",
+      "logo": "https://www.google.com/s2/favicons?domain=qwest.com&sz=128"
+    },
+    {
+      "name": "Rockbot",
+      "url": "https://img-rockbot.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Music",
+      "homepage": "https://www.rockbot.com",
+      "logo": "https://www.google.com/s2/favicons?domain=rockbot.com&sz=128"
+    },
+    {
+      "name": "California Music Channel",
+      "url": "https://cmc-ono.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Music",
+      "homepage": "https://cmc-ono.amagi.tv",
+      "logo": "https://www.google.com/s2/favicons?domain=cmc-ono.amagi.tv&sz=128"
+    },
+    {
+      "name": "Radio Paradise",
+      "url": "http://stream.radioparadise.com/flac",
+      "country": "USA",
+      "genre": "Music",
+      "homepage": "https://stream.radioparadise.com",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d9/Iheartmedia_logo.svg/512px-Iheartmedia_logo.svg.png"
+    },
+    {
+      "name": "181.FM - The Eagle",
+      "url": "https://listen.181fm.com/181-eagle_128k.mp3",
+      "country": "USA",
+      "genre": "Music",
+      "homepage": "https://www.listen.181fm.com",
+      "logo": "https://www.google.com/s2/favicons?domain=listen.181fm.com&sz=128",
+      "favicon": "https://www.181.fm/favicon.ico"
+    },
+    {
+      "name": "181.FM - 90's Alternative",
+      "url": "https://listen.181fm.com/181-90salt_128k.mp3",
+      "country": "USA",
+      "genre": "Music",
+      "homepage": "https://www.listen.181fm.com",
+      "logo": "https://www.google.com/s2/favicons?domain=listen.181fm.com&sz=128",
+      "favicon": "https://www.181.fm/favicon.ico"
+    },
+    {
+      "name": "Smooth Jazz 24/7",
+      "url": "http://ice1.somafm.com/smoothjazz-128-mp3",
+      "country": "USA",
+      "genre": "Music",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/MTV_logo_%282010%29.svg/512px-MTV_logo_%282010%29.svg.png",
+      "homepage": "https://www.ice1.somafm.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/Smooth_Radio_logo.svg/512px-Smooth_Radio_logo.svg.png"
+    },
+    {
+      "name": "Fuse Backstage",
+      "url": "https://fuse-backstage-roku.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Music",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/MTV_logo_%282010%29.svg/512px-MTV_logo_%282010%29.svg.png",
+      "homepage": "https://www.fuse.tv",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c4/Fuse_TV_logo.svg/512px-Fuse_TV_logo.svg.png"
+    },
+    {
+      "name": "Fuse Beats",
+      "url": "https://fuse-beats-roku.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Music",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/MTV_logo_%282010%29.svg/512px-MTV_logo_%282010%29.svg.png",
+      "homepage": "https://www.fuse.tv",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c4/Fuse_TV_logo.svg/512px-Fuse_TV_logo.svg.png"
+    },
+    {
+      "name": "Fuse XL",
+      "url": "https://fusexl-plex.amagi.tv/playlist.m3u8",
+      "country": "USA",
+      "genre": "Music",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/MTV_logo_%282010%29.svg/512px-MTV_logo_%282010%29.svg.png",
+      "homepage": "https://www.fuse.tv",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c4/Fuse_TV_logo.svg/512px-Fuse_TV_logo.svg.png"
+    },
+    {
+      "name": "MTV HD",
+      "url": "http://149.202.215.151:8080/live/home/home/11004.ts",
+      "country": "UK",
+      "genre": "Music",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/MTV_logo_%282010%29.svg/512px-MTV_logo_%282010%29.svg.png",
+      "homepage": "https://www.mtv.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=mtv.com&sz=128"
+    },
+    {
+      "name": "MTV Hits HD",
+      "url": "http://149.202.215.151:8080/live/home/home/11007.ts",
+      "country": "UK",
+      "genre": "Music",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/MTV_logo_%282010%29.svg/512px-MTV_logo_%282010%29.svg.png",
+      "homepage": "https://www.mtv.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=mtv.com&sz=128"
+    },
+    {
+      "name": "MTV Rocks HD",
+      "url": "http://149.202.215.151:8080/live/home/home/9449.ts",
+      "country": "UK",
+      "genre": "Music",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/MTV_logo_%282010%29.svg/512px-MTV_logo_%282010%29.svg.png",
+      "homepage": "https://www.mtv.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=mtv.com&sz=128"
+    },
+    {
+      "name": "MTV Dance HD",
+      "url": "http://149.202.215.151:8080/live/home/home/11008.ts",
+      "country": "UK",
+      "genre": "Music",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/MTV_logo_%282010%29.svg/512px-MTV_logo_%282010%29.svg.png",
+      "homepage": "https://www.mtv.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=mtv.com&sz=128"
+    },
+    {
+      "name": "MTV Base HD",
+      "url": "http://149.202.215.151:8080/live/home/home/9447.ts",
+      "country": "UK",
+      "genre": "Music",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/MTV_logo_%282010%29.svg/512px-MTV_logo_%282010%29.svg.png",
+      "homepage": "https://www.mtv.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=mtv.com&sz=128"
+    },
+    {
+      "name": "MTV Live HD",
+      "url": "http://149.202.215.151:8080/live/home/home/11006.ts",
+      "country": "UK",
+      "genre": "Music",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/MTV_logo_%282010%29.svg/512px-MTV_logo_%282010%29.svg.png",
+      "homepage": "https://www.mtv.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=mtv.com&sz=128"
+    },
+    {
+      "name": "MTV Classic",
+      "url": "http://149.202.215.151:8080/live/home/home/8250.ts",
+      "country": "UK",
+      "genre": "Music",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/MTV_logo_%282010%29.svg/512px-MTV_logo_%282010%29.svg.png",
+      "homepage": "https://www.mtv.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=mtv.com&sz=128"
+    },
+    {
+      "name": "VH1",
+      "url": "http://149.202.215.151:8080/live/home/home/8251.ts",
+      "country": "UK",
+      "genre": "Music",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/VH1_logo.svg/512px-VH1_logo.svg.png",
+      "homepage": "https://www.vh1.com",
+      "favicon": "https://www.google.com/s2/favicons?domain=vh1.com&sz=128"
+    },
+    {
+      "name": "Kiss TV",
+      "url": "http://149.202.215.151:8080/live/home/home/9455.ts",
+      "country": "UK",
+      "genre": "Music",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/MTV_logo_%282010%29.svg/512px-MTV_logo_%282010%29.svg.png",
+      "homepage": "https://www.149.202.215.151.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Kiss_logo.svg/512px-Kiss_logo.svg.png"
+    },
+    {
+      "name": "Capital Radio TV",
+      "url": "http://149.202.215.151:8080/live/home/home/12149.ts",
+      "country": "UK",
+      "genre": "Music",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/MTV_logo_%282010%29.svg/512px-MTV_logo_%282010%29.svg.png",
+      "homepage": "https://www.149.202.215.151.com",
+      "favicon": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Capital_%28radio_network%29_logo.svg/512px-Capital_%28radio_network%29_logo.svg.png"
+    },
+    {
+      "name": "B4U Music",
+      "url": "http://149.202.215.151:8080/live/home/home/10743.ts",
+      "country": "UK",
+      "genre": "Music",
+      "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b1/MTV_logo_%282010%29.svg/512px-MTV_logo_%282010%29.svg.png",
+      "homepage": "https://www.149.202.215.151.com",
+      "favicon": "https://www.b4umusic.com/favicon.ico"
+    }
+  ],
+  "audiobooks": [],
+  "podcasts": []
+}

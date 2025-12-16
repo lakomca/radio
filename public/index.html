@@ -8,7 +8,7 @@
 </head>
 <body>
     <nav class="navbar">
-        <div class="navbar-top">
+            <div class="navbar-top">
             <div class="navbar-brand">
                 <h1>PULSE</h1>
                 <p class="brand-tagline">YOUR FREQUENCY FOR MUSIC & TALK</p>
@@ -98,11 +98,56 @@
                 </div>
             </div>
         </div>
+        
+        <div class="categories-section">
+            <button class="category-btn" data-category="news">NEWS</button>
+            <button class="category-btn" data-category="live-sports">LIVE SPORTS</button>
+            <button class="category-btn" data-category="music">MUSIC</button>
+            <button class="category-btn" data-category="audiobooks">AUDIOBOOKS</button>
+            <button class="category-btn" data-category="podcasts">PODCASTS</button>
+            <button class="category-btn" data-category="international">INTERNATIONAL</button>
+        </div>
+        
+        <div id="countriesSection" class="countries-section" style="display: none;">
+            <div class="section-header">
+                <h2>Select a Country</h2>
+            </div>
+            <div id="countriesGrid" class="countries-grid"></div>
+        </div>
+        
+        <div id="genresSection" class="countries-section" style="display: none;">
+            <div class="section-header">
+                <h2>Select a Music Genre</h2>
+            </div>
+            <div id="genresGrid" class="countries-grid"></div>
+        </div>
+        
+        <div id="stationsSection" class="stations-section" style="display: none;">
+            <div class="section-header">
+                <button id="backToCountriesBtn" class="back-button" style="display: none;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+                    </svg>
+                    Back to Countries
+                </button>
+                <button id="backToGenresBtn" class="back-button" style="display: none;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+                    </svg>
+                    Back to Genres
+                </button>
+                <h2 id="stationsHeader">Radio Stations</h2>
+            </div>
+            <div id="stationsList" class="stations-list"></div>
+        </div>
     </nav>
 
-    <div class="container">
-        <div id="searchResults" class="search-results"></div>
+    <div class="main-content">
+        <div class="container">
+            <div id="searchResults" class="search-results"></div>
+        </div>
     </div>
+
 
     <audio id="audioPlayer" preload="none"></audio>
 
