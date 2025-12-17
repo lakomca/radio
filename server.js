@@ -5,6 +5,7 @@ const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const cors = require('cors');
+const db = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -375,7 +376,7 @@ app.get('/stream', (req, res) => {
         console.log(`Audio URL: ${url.substring(0, 100)}...`);
         
         // Set headers for audio streaming - send immediately
-        res.setHeader('Content-Type', 'audio/mpeg');
+        res.setHeader('Content-Type', 'audio/aac');  // Changed from audio/mpeg for AAC format
         res.setHeader('Transfer-Encoding', 'chunked');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
@@ -384,15 +385,15 @@ app.get('/stream', (req, res) => {
         
         const ffmpegArgs = [
             '-i', url,
-            '-f', 'mp3',
-            '-acodec', 'libmp3lame',
-            '-ab', '128k',  // Lower bitrate for faster start
-            '-ar', '44100',
-            '-ac', '2',
+            '-f', 'adts',  // AAC container format (better for streaming and interruptions)
+            '-acodec', 'aac',
+            '-b:a', '128k',  // Audio bitrate
+            '-ar', '44100',  // Sample rate
+            '-ac', '2',  // Stereo
             '-reconnect', '1',
             '-reconnect_at_eof', '1',
             '-reconnect_streamed', '1',
-            '-reconnect_delay_max', '5',  // Increased delay for better reconnection
+            '-reconnect_delay_max', '10',  // Increased delay for better reconnection
             '-reconnect_on_network_error', '1',
             '-fflags', '+genpts',  // Generate presentation timestamps
             '-avoid_negative_ts', 'make_zero',  // Prevent timestamp issues

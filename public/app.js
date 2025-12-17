@@ -26,6 +26,29 @@ const nowPlayingTitle = document.getElementById('nowPlayingTitle');
 const videoThumbnail = document.getElementById('videoThumbnail');
 // Navbar brand removed - always shows PULSE
 
+// Authentication elements
+const authModal = document.getElementById('authModal');
+const authButtons = document.getElementById('authButtons');
+const userProfile = document.getElementById('userProfile');
+const loginBtn = document.getElementById('loginBtn');
+const signupBtn = document.getElementById('signupBtn');
+const logoutBtn = document.getElementById('logoutBtn');
+const usernameDisplay = document.getElementById('usernameDisplay');
+const authFormElement = document.getElementById('authFormElement');
+const authTitle = document.getElementById('authTitle');
+const authSubmitBtn = document.getElementById('authSubmitBtn');
+const authToggle = document.getElementById('authToggle');
+const authError = document.getElementById('authError');
+const authEmail = document.getElementById('authEmail');
+const authUsername = document.getElementById('authUsername');
+const authPassword = document.getElementById('authPassword');
+const signupFields = document.getElementById('signupFields');
+const closeModal = document.querySelector('.close-modal');
+
+// User state
+let currentUser = null;
+let isLoginMode = true;
+
 let currentStreamUrl = null;
 let currentVideoUrl = null; // Track current video URL (replaces youtubeUrlInput)
 let currentVideoDuration = null; // Track current video duration from search results
@@ -39,7 +62,272 @@ let endedHandler = null; // Handler for ended event
 let isBuffering = false;
 let lastCurrentTime = 0;
 let streamStartTime = null; // Track when stream started
+let connectionQuality = 'good'; // 'good', 'fair', 'poor'
+let reconnectAttempts = 0;
+let maxReconnectAttempts = 5;
+let adaptiveBufferTarget = 5; // Target buffer in seconds (adaptive)
 let allSearchVideos = []; // Store all search results
+
+// ===== AUTHENTICATION & FAVORITES =====
+
+// Check authentication status on page load
+async function checkAuthStatus() {
+    try {
+        const response = await fetch('/api/auth/me');
+        if (response.ok) {
+            const data = await response.json();
+            currentUser = data.user;
+            updateAuthUI();
+        } else {
+            currentUser = null;
+            updateAuthUI();
+        }
+    } catch (error) {
+        console.error('Error checking auth status:', error);
+        currentUser = null;
+        updateAuthUI();
+    }
+}
+
+// Update UI based on auth status
+function updateAuthUI() {
+    if (currentUser) {
+        authButtons.style.display = 'none';
+        userProfile.style.display = 'flex';
+        usernameDisplay.textContent = currentUser.username;
+    } else {
+        authButtons.style.display = 'flex';
+        userProfile.style.display = 'none';
+    }
+}
+
+// Login function
+async function login(username, password) {
+    try {
+        const response = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ username, password })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            currentUser = data.user;
+            updateAuthUI();
+            authModal.style.display = 'none';
+            authError.style.display = 'none';
+            return true;
+        } else {
+            authError.textContent = data.error || 'Login failed';
+            authError.style.display = 'block';
+            return false;
+        }
+    } catch (error) {
+        console.error('Login error:', error);
+        authError.textContent = 'Login failed. Please try again.';
+        authError.style.display = 'block';
+        return false;
+    }
+}
+
+// Signup function
+async function signup(username, email, password) {
+    try {
+        const response = await fetch('/api/auth/signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ username, email, password })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            currentUser = data.user;
+            updateAuthUI();
+            authModal.style.display = 'none';
+            authError.style.display = 'none';
+            return true;
+        } else {
+            authError.textContent = data.error || 'Signup failed';
+            authError.style.display = 'block';
+            return false;
+        }
+    } catch (error) {
+        console.error('Signup error:', error);
+        authError.textContent = 'Signup failed. Please try again.';
+        authError.style.display = 'block';
+        return false;
+    }
+}
+
+// Logout function
+async function logout() {
+    try {
+        await fetch('/api/auth/logout', {
+            method: 'POST',
+            credentials: 'include'
+        });
+        currentUser = null;
+        updateAuthUI();
+    } catch (error) {
+        console.error('Logout error:', error);
+    }
+}
+
+// Add favorite
+async function addFavorite(itemType, itemId, itemName, itemUrl, category, logoUrl, metadata) {
+    if (!currentUser) {
+        alert('Please login to add favorites');
+        return false;
+    }
+    try {
+        const response = await fetch('/api/favorites', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ itemType, itemId, itemName, itemUrl, category, logoUrl, metadata })
+        });
+        if (response.ok) {
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error('Add favorite error:', error);
+        return false;
+    }
+}
+
+// Remove favorite
+async function removeFavorite(itemType, itemId) {
+    if (!currentUser) return false;
+    try {
+        const response = await fetch('/api/favorites', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ itemType, itemId })
+        });
+        if (response.ok) {
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error('Remove favorite error:', error);
+        return false;
+    }
+}
+
+// Check if item is favorite
+async function checkIfFavorite(itemType, itemId) {
+    if (!currentUser) return false;
+    try {
+        const response = await fetch(`/api/favorites/check?itemType=${itemType}&itemId=${encodeURIComponent(itemId)}`, {
+            credentials: 'include'
+        });
+        if (response.ok) {
+            const data = await response.json();
+            return data.isFavorite;
+        }
+        return false;
+    } catch (error) {
+        console.error('Check favorite error:', error);
+        return false;
+    }
+}
+
+// Create heart button
+function createHeartButton(itemType, itemId, isFavorite = false) {
+    const heartBtn = document.createElement('button');
+    heartBtn.className = 'heart-btn' + (isFavorite ? ' favorite' : '');
+    heartBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+        </svg>
+    `;
+    return heartBtn;
+}
+
+// Toggle favorite
+async function toggleFavorite(heartBtn, itemType, itemId, itemName, itemUrl, category, logoUrl, metadata) {
+    const isFavorite = heartBtn.classList.contains('favorite');
+    
+    if (isFavorite) {
+        const success = await removeFavorite(itemType, itemId);
+        if (success) {
+            heartBtn.classList.remove('favorite');
+        }
+    } else {
+        const success = await addFavorite(itemType, itemId, itemName, itemUrl, category, logoUrl, metadata);
+        if (success) {
+            heartBtn.classList.add('favorite');
+        }
+    }
+}
+
+// Get favorites grouped by category
+async function getFavoritesByCategory() {
+    if (!currentUser) return {};
+    try {
+        const response = await fetch('/api/favorites', {
+            credentials: 'include'
+        });
+        if (response.ok) {
+            const data = await response.json();
+            return data.favoritesByCategory || {};
+        }
+        return {};
+    } catch (error) {
+        console.error('Get favorites error:', error);
+        return {};
+    }
+}
+
+// Initialize auth on page load
+checkAuthStatus();
+
+// Adaptive buffering - adjusts target buffer based on connection quality
+function updateConnectionQuality(bufferedAhead, downloadSpeed) {
+    // Monitor buffered amount and adjust connection quality
+    if (bufferedAhead < 3) {
+        connectionQuality = 'poor';
+        adaptiveBufferTarget = 15; // Increase buffer target for poor connections
+    } else if (bufferedAhead < 8) {
+        connectionQuality = 'fair';
+        adaptiveBufferTarget = 10; // Moderate buffer for fair connections
+    } else {
+        connectionQuality = 'good';
+        adaptiveBufferTarget = 5; // Lower buffer for good connections (faster start)
+    }
+}
+
+// Automatic reconnection function - retries stream with increased buffering
+async function reconnectStream() {
+    if (reconnectAttempts >= maxReconnectAttempts) {
+        console.error(`❌ Max reconnection attempts (${maxReconnectAttempts}) reached. Stopping.`);
+        alert('Stream connection failed. Please try refreshing the page or selecting a different stream.');
+        return;
+    }
+    
+    reconnectAttempts++;
+    console.log(`🔄 Reconnection attempt ${reconnectAttempts}/${maxReconnectAttempts}`);
+    
+    // Increase buffer target for reconnection
+    adaptiveBufferTarget = Math.min(adaptiveBufferTarget + 5, 30); // Max 30 seconds buffer
+    connectionQuality = 'poor';
+    
+    // Wait a bit before retrying (exponential backoff)
+    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 5000);
+    console.log(`⏳ Waiting ${delay}ms before reconnection...`);
+    
+    await new Promise(resolve => setTimeout(resolve, delay));
+    
+    // Reload the stream if we have a current stream URL
+    if (currentStreamUrl) {
+        console.log('🔄 Reconnecting to stream:', currentStreamUrl);
+        const url = currentStreamUrl.replace('/stream?url=', '').replace(/\&retry=true/g, '');
+        const decodedUrl = decodeURIComponent(url);
+        loadStream(decodedUrl);
+    }
+}
 let displayedVideosCount = 0; // Track how many videos are currently displayed
 const VIDEOS_PER_BATCH = 9; // Number of videos to load per batch
 let loadMoreBtn = null; // Reference to load more button
@@ -104,34 +392,42 @@ audioPlayer.addEventListener('timeupdate', () => {
     lastCurrentTime = currentTime;
 });
 
-// Handle progress events (buffering)
+// Handle progress events (buffering) - now with adaptive buffering
 audioPlayer.addEventListener('progress', () => {
     if (audioPlayer.buffered.length > 0) {
         const bufferedEnd = audioPlayer.buffered.end(audioPlayer.buffered.length - 1);
         const currentTime = audioPlayer.currentTime;
         const bufferedAhead = bufferedEnd - currentTime;
         
-        if (bufferedAhead < 2 && !audioPlayer.paused) {
+        // Update connection quality based on buffer levels
+        updateConnectionQuality(bufferedAhead, null);
+        
+        // Adaptive buffering threshold
+        const bufferThreshold = adaptiveBufferTarget / 2;
+        if (bufferedAhead < bufferThreshold && !audioPlayer.paused) {
             if (!isBuffering) {
                 isBuffering = true;
-                console.log('📊 Buffering started - buffer ahead:', bufferedAhead.toFixed(2), 'seconds');
+                console.log(`📊 Buffering started - buffer ahead: ${bufferedAhead.toFixed(2)}s, target: ${adaptiveBufferTarget}s (${connectionQuality} connection)`);
             }
-        } else if (isBuffering && bufferedAhead > 5) {
+        } else if (isBuffering && bufferedAhead > adaptiveBufferTarget) {
             isBuffering = false;
-            console.log('✅ Buffering complete - buffer ahead:', bufferedAhead.toFixed(2), 'seconds');
+            console.log(`✅ Buffering complete - buffer ahead: ${bufferedAhead.toFixed(2)}s (${connectionQuality} connection)`);
         }
     }
 });
 
-// Handle stalled events - this happens during normal buffering
+// Handle stalled events - with automatic retry and increased buffering
 audioPlayer.addEventListener('stalled', () => {
     console.log('⚠️ Stream stalled - waiting for data');
     const buffered = audioPlayer.buffered;
     const bufferedTime = buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
     console.log(`  Current readyState: ${audioPlayer.readyState}, buffered: ${bufferedTime.toFixed(2)}s`);
     
-    // Don't reload or restart - let browser handle buffering naturally
-    // But if we're still loading and have some data, try to play
+    // Mark connection as poor when stalling occurs
+    connectionQuality = 'poor';
+    adaptiveBufferTarget = 15; // Increase buffer target after stall
+    
+    // If we're still loading and have some data, try to play
     if (isLoading && (audioPlayer.readyState >= 1 || bufferedTime > 0)) {
         setTimeout(() => {
             if (isLoading && audioPlayer.paused) {
@@ -141,12 +437,13 @@ audioPlayer.addEventListener('stalled', () => {
                 audioPlayer.play().then(() => {
                     console.log('✅ Playback resumed after stall');
                     isLoading = false;
+                    reconnectAttempts = 0; // Reset on successful play
                     updatePlayPauseButton(true);
                 }).catch(err => {
                     console.error('Play failed after stall:', err.message);
                 });
             }
-        }, 1000); // Shorter delay - try sooner
+        }, 1000);
     }
 });
 
@@ -456,6 +753,11 @@ function loadStream(youtubeUrl) {
         console.warn('Error resetting audio player:', e);
     }
     
+    // Reset reconnection attempts for new stream
+    reconnectAttempts = 0;
+    adaptiveBufferTarget = 5; // Reset to default
+    connectionQuality = 'good';
+    
     // Small delay to ensure reset is complete
     setTimeout(() => {
         console.log('Setting new audio source:', streamUrl);
@@ -574,7 +876,7 @@ function loadStream(youtubeUrl) {
         playPauseBtn.disabled = false;
         updatePlayPauseButton(false);
         
-        // Try to get more details about the error
+        // Try to get more details about the error and reconnect if needed
         if (audioPlayer.error) {
             const errorMessages = {
                 1: 'MEDIA_ERR_ABORTED - The user aborted the loading',
@@ -583,6 +885,16 @@ function loadStream(youtubeUrl) {
                 4: 'MEDIA_ERR_SRC_NOT_SUPPORTED - The media could not be loaded'
             };
             console.error('Error details:', errorMessages[audioPlayer.error.code] || 'Unknown error');
+            
+            // MEDIA_ERR_NETWORK (2) or MEDIA_ERR_SRC_NOT_SUPPORTED (4) - try to reconnect
+            if (audioPlayer.error.code === 2 || audioPlayer.error.code === 4) {
+                console.log('🔄 Network or source error detected, attempting reconnection...');
+                reconnectStream();
+            } else if (audioPlayer.error.code === 3) {
+                // MEDIA_ERR_DECODE - decoding error, might need to reload
+                console.log('🔄 Decoding error, attempting reconnection...');
+                reconnectStream();
+            }
         }
     }, { once: true });
     
@@ -662,17 +974,63 @@ function loadStream(youtubeUrl) {
             // Reset ended handler flag when new stream is ready to play
             isHandlingEnded = false;
             
-        audioPlayer.play().then(() => {
-            console.log('✅ Audio play started');
-                isLoading = false; // Mark as loaded after successful play
-            updatePlayPauseButton(true);
-                cleanupProgressCheck();
-        }).catch(err => {
-            console.error('❌ Play error:', err);
-                isLoading = false; // Mark as loaded even on error
-                isHandlingEnded = false;
-                cleanupProgressCheck();
-            });
+            // Check buffer before playing (adaptive)
+            const buffered = audioPlayer.buffered;
+            const bufferedEnd = buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
+            const bufferedAhead = bufferedEnd - audioPlayer.currentTime;
+            
+            // For quick start, play if we have at least 2 seconds buffer or readyState >= 3
+            const minBufferForQuickStart = 2;
+            if (bufferedAhead >= minBufferForQuickStart || audioPlayer.readyState >= 3) {
+                audioPlayer.play().then(() => {
+                    console.log(`✅ Audio play started (buffer: ${bufferedAhead.toFixed(2)}s)`);
+                    isLoading = false;
+                    reconnectAttempts = 0; // Reset on successful play
+                    updatePlayPauseButton(true);
+                    cleanupProgressCheck();
+                }).catch(err => {
+                    console.error('❌ Play error:', err);
+                    isLoading = false;
+                    isHandlingEnded = false;
+                    cleanupProgressCheck();
+                });
+            } else {
+                // Wait for more buffer
+                console.log(`⏳ Waiting for buffer (${bufferedAhead.toFixed(2)}s < ${minBufferForQuickStart}s)...`);
+                // Check again in 500ms
+                setTimeout(() => {
+                    if (isLoading) {
+                        const newBuffered = audioPlayer.buffered.length > 0 
+                            ? audioPlayer.buffered.end(audioPlayer.buffered.length - 1) - audioPlayer.currentTime 
+                            : 0;
+                        if (newBuffered >= minBufferForQuickStart || audioPlayer.readyState >= 3) {
+                            audioPlayer.play().then(() => {
+                                console.log(`✅ Audio play started after buffering (buffer: ${newBuffered.toFixed(2)}s)`);
+                                isLoading = false;
+                                reconnectAttempts = 0;
+                                updatePlayPauseButton(true);
+                                cleanupProgressCheck();
+                            }).catch(err => {
+                                console.error('❌ Play error after buffering:', err);
+                                isLoading = false;
+                                cleanupProgressCheck();
+                            });
+                        } else {
+                            // Still not enough buffer, but try anyway if readyState is good
+                            audioPlayer.play().then(() => {
+                                console.log('✅ Audio play started (minimal buffer, readyState >= 3)');
+                                isLoading = false;
+                                updatePlayPauseButton(true);
+                                cleanupProgressCheck();
+                            }).catch(err => {
+                                console.error('❌ Play error:', err);
+                                isLoading = false;
+                                cleanupProgressCheck();
+                            });
+                        }
+                    }
+                }, 500);
+            }
         } else {
             // If isLoading is false but canplay fires, it might be buffering recovery
             // Don't interfere - let browser handle it
@@ -683,6 +1041,24 @@ function loadStream(youtubeUrl) {
     
     audioPlayer.addEventListener('canplaythrough', () => {
         console.log('✅ Audio can play through');
+        // Ensure we have enough buffer before playing (adaptive)
+        const buffered = audioPlayer.buffered;
+        const bufferedEnd = buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
+        const bufferedAhead = bufferedEnd - audioPlayer.currentTime;
+        
+        if (bufferedAhead < adaptiveBufferTarget && !audioPlayer.paused && !isLoading) {
+            console.log(`⏳ Waiting for more buffer (${bufferedAhead.toFixed(2)}s < ${adaptiveBufferTarget}s target)...`);
+            // Pause briefly to allow more buffering
+            audioPlayer.pause();
+            setTimeout(() => {
+                if (audioPlayer.buffered.length > 0) {
+                    const newBuffered = audioPlayer.buffered.end(audioPlayer.buffered.length - 1) - audioPlayer.currentTime;
+                    if (newBuffered >= adaptiveBufferTarget * 0.7 || audioPlayer.readyState >= 3) {
+                        audioPlayer.play().catch(err => console.error('Play after buffering failed:', err));
+                    }
+                }
+            }, 500);
+        }
     }, { once: true });
     
     // Re-setup ended listener after loading new stream
@@ -1248,6 +1624,19 @@ function displayCategoryStations(stations, category) {
         const innerDiv = stationCard.querySelector('div');
         innerDiv.insertBefore(logoContainer, innerDiv.firstChild);
         
+        // Add heart button if user is logged in
+        if (currentUser) {
+            const itemId = station.url || station.stationuuid || station.name;
+            checkIfFavorite('station', itemId).then(isFav => {
+                const heartBtn = createHeartButton('station', itemId, isFav);
+                stationCard.appendChild(heartBtn);
+                heartBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    await toggleFavorite(heartBtn, 'station', itemId, station.name, station.url || station.url_resolved, category, station.logo || station.favicon, station);
+                });
+            });
+        }
+        
         stationCard.addEventListener('click', () => {
             playCategoryStation(station);
         });
@@ -1439,6 +1828,37 @@ categoryButtons.forEach(btn => {
                 
                 // Load genres
                 loadMusicGenres();
+            }
+            return;
+        }
+        
+        // Handle favorites category
+        if (category === 'favorites') {
+            if (!currentUser) {
+                alert('Please login to view favorites');
+                return;
+            }
+            // Toggle active state
+            if (activeCategory === category) {
+                btn.classList.remove('active');
+                activeCategory = null;
+                searchResults.innerHTML = '';
+                countriesSection.style.display = 'none';
+                genresSection.style.display = 'none';
+                stationsSection.style.display = 'none';
+            } else {
+                // Remove active from all buttons
+                categoryButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                activeCategory = category;
+                
+                // Hide other sections
+                countriesSection.style.display = 'none';
+                genresSection.style.display = 'none';
+                stationsSection.style.display = 'none';
+                
+                // Load and display favorites
+                loadFavorites();
             }
             return;
         }
@@ -1668,6 +2088,22 @@ function loadMoreVideos() {
         
         item.appendChild(title);
         item.appendChild(duration);
+        
+        // Add heart button if user is logged in
+        if (currentUser) {
+            const videoId = video.id || getVideoIdFromUrl(video.url);
+            const itemId = videoId || video.url;
+            checkIfFavorite('video', itemId).then(isFav => {
+                const heartBtn = createHeartButton('video', itemId, isFav);
+                item.style.position = 'relative';
+                item.appendChild(heartBtn);
+                heartBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/default.jpg` : null;
+                    await toggleFavorite(heartBtn, 'video', itemId, video.title, video.url, 'search', thumbnailUrl, { id: videoId, duration: video.duration });
+                });
+            });
+        }
         
         item.addEventListener('click', (e) => {
             e.preventDefault();
@@ -2111,4 +2547,108 @@ audioPlayer.addEventListener('pause', () => {
 
 // Set up ended listener initially
 setupEndedListener();
+
+// ===== AUTHENTICATION MODAL EVENT LISTENERS =====
+
+// Login button
+if (loginBtn) {
+    loginBtn.addEventListener('click', () => {
+        isLoginMode = true;
+        authTitle.textContent = 'Login';
+        signupFields.style.display = 'none';
+        authSubmitBtn.textContent = 'Login';
+        authToggle.textContent = "Don't have an account? Sign up";
+        authModal.style.display = 'block';
+        authError.style.display = 'none';
+    });
+}
+
+// Signup button
+if (signupBtn) {
+    signupBtn.addEventListener('click', () => {
+        isLoginMode = false;
+        authTitle.textContent = 'Sign Up';
+        signupFields.style.display = 'block';
+        authSubmitBtn.textContent = 'Sign Up';
+        authToggle.textContent = 'Already have an account? Login';
+        authModal.style.display = 'block';
+        authError.style.display = 'none';
+    });
+}
+
+// Logout button
+if (logoutBtn) {
+    logoutBtn.addEventListener('click', () => {
+        logout();
+    });
+}
+
+// Close modal
+if (closeModal) {
+    closeModal.addEventListener('click', () => {
+        authModal.style.display = 'none';
+    });
+}
+
+// Close modal on outside click
+if (authModal) {
+    authModal.addEventListener('click', (e) => {
+        if (e.target === authModal) {
+            authModal.style.display = 'none';
+        }
+    });
+}
+
+// Toggle between login and signup
+if (authToggle) {
+    authToggle.addEventListener('click', () => {
+        isLoginMode = !isLoginMode;
+        if (isLoginMode) {
+            authTitle.textContent = 'Login';
+            signupFields.style.display = 'none';
+            authSubmitBtn.textContent = 'Login';
+            authToggle.textContent = "Don't have an account? Sign up";
+        } else {
+            authTitle.textContent = 'Sign Up';
+            signupFields.style.display = 'block';
+            authSubmitBtn.textContent = 'Sign Up';
+            authToggle.textContent = 'Already have an account? Login';
+        }
+        authError.style.display = 'none';
+    });
+}
+
+// Form submission
+if (authFormElement) {
+    authFormElement.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const username = authUsername.value.trim();
+        const password = authPassword.value.trim();
+        
+        if (!username || !password) {
+            authError.textContent = 'Please fill in all fields';
+            authError.style.display = 'block';
+            return;
+        }
+        
+        if (isLoginMode) {
+            await login(username, password);
+        } else {
+            const email = authEmail.value.trim();
+            if (!email) {
+                authError.textContent = 'Please fill in all fields';
+                authError.style.display = 'block';
+                return;
+            }
+            await signup(username, email, password);
+        }
+        
+        // Clear form on success
+        if (currentUser) {
+            authUsername.value = '';
+            authPassword.value = '';
+            authEmail.value = '';
+        }
+    });
+}
 
