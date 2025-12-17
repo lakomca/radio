@@ -301,6 +301,228 @@ async function getFavoritesByCategory() {
     }
 }
 
+// Load and display favorites
+async function loadFavorites() {
+    if (!currentUser) {
+        searchResults.innerHTML = '<div class="error">Please login to view favorites</div>';
+        return;
+    }
+    
+    searchResults.innerHTML = '<div class="loading-spinner"></div>';
+    
+    try {
+        const favoritesByCategory = await getFavoritesByCategory();
+        
+        if (Object.keys(favoritesByCategory).length === 0) {
+            searchResults.innerHTML = '<div class="error">No favorites yet. Click the heart icon on stations or videos to add them to favorites.</div>';
+            return;
+        }
+        
+        // Clear search results
+        searchResults.innerHTML = '';
+        
+        // Display favorites grouped by category
+        const categoryOrder = ['music', 'news', 'live-sports', 'international', 'search', 'audiobooks', 'podcasts'];
+        const categories = Object.keys(favoritesByCategory).sort((a, b) => {
+            const aIndex = categoryOrder.indexOf(a.toLowerCase());
+            const bIndex = categoryOrder.indexOf(b.toLowerCase());
+            if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
+            if (aIndex === -1) return 1;
+            if (bIndex === -1) return -1;
+            return aIndex - bIndex;
+        });
+        
+        categories.forEach(category => {
+            const favorites = favoritesByCategory[category];
+            if (!favorites || favorites.length === 0) return;
+            
+            // Create category section container
+            const categorySection = document.createElement('div');
+            categorySection.className = 'favorites-category-section';
+            
+            // Create category header with better styling
+            const categoryHeader = document.createElement('div');
+            categoryHeader.className = 'favorites-category-header';
+            const categoryTitle = document.createElement('h2');
+            categoryTitle.textContent = category.charAt(0).toUpperCase() + category.slice(1).replace(/-/g, ' ');
+            const categoryCount = document.createElement('span');
+            categoryCount.className = 'favorites-count';
+            categoryCount.textContent = `${favorites.length} ${favorites.length === 1 ? 'item' : 'items'}`;
+            categoryHeader.appendChild(categoryTitle);
+            categoryHeader.appendChild(categoryCount);
+            categorySection.appendChild(categoryHeader);
+            
+            // Create items container for this category
+            const itemsContainer = document.createElement('div');
+            itemsContainer.className = 'favorites-items-grid';
+            
+            // Display favorites for this category
+            favorites.forEach(fav => {
+                if (fav.item_type === 'station') {
+                    // Create station card
+                    const stationCard = document.createElement('div');
+                    stationCard.className = 'result-item favorite-item';
+                    stationCard.style.cursor = 'pointer';
+                    stationCard.style.position = 'relative';
+                    
+                    // Logo container
+                    const logoContainer = document.createElement('div');
+                    logoContainer.style.cssText = 'width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; font-size: 2.5em; flex-shrink: 0; border-radius: 8px; overflow: hidden; background: #2a3a3f;';
+                    
+                    if (fav.logo_url) {
+                        const logoImg = document.createElement('img');
+                        logoImg.src = fav.logo_url;
+                        logoImg.alt = fav.item_name;
+                        logoImg.style.cssText = 'width: 60px; height: 60px; object-fit: cover;';
+                        logoImg.onerror = function() {
+                            this.style.display = 'none';
+                            const emojiSpan = document.createElement('span');
+                            emojiSpan.textContent = '📻';
+                            emojiSpan.style.cssText = 'font-size: 2em;';
+                            logoContainer.appendChild(emojiSpan);
+                        };
+                        logoContainer.appendChild(logoImg);
+                    } else {
+                        logoContainer.innerHTML = '<span style="font-size: 2em;">📻</span>';
+                    }
+                    
+                    // Card content
+                    const cardContent = document.createElement('div');
+                    cardContent.style.cssText = 'display: flex; align-items: center; gap: 15px; flex: 1;';
+                    
+                    const textContent = document.createElement('div');
+                    textContent.style.cssText = 'flex: 1; min-width: 0;';
+                    
+                    const nameDiv = document.createElement('div');
+                    nameDiv.style.cssText = 'color: #ffffff; font-size: 1em; font-weight: 500; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
+                    nameDiv.textContent = fav.item_name;
+                    
+                    textContent.appendChild(nameDiv);
+                    cardContent.appendChild(logoContainer);
+                    cardContent.appendChild(textContent);
+                    
+                    stationCard.appendChild(cardContent);
+                    
+                    // Add heart button (already favorited)
+                    const heartBtn = createHeartButton('station', fav.item_id, true);
+                    stationCard.appendChild(heartBtn);
+                    heartBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        await toggleFavorite(heartBtn, 'station', fav.item_id, fav.item_name, fav.item_url, category, fav.logo_url, fav.metadata);
+                        // Reload favorites after removal
+                        if (!heartBtn.classList.contains('favorite')) {
+                            loadFavorites();
+                        }
+                    });
+                    
+                    stationCard.addEventListener('click', () => {
+                        // Parse metadata to reconstruct station object
+                        const station = {
+                            name: fav.item_name,
+                            url: fav.item_url,
+                            url_resolved: fav.item_url,
+                            favicon: fav.logo_url,
+                            logo: fav.logo_url,
+                            stationuuid: fav.item_id,
+                            ...(fav.metadata || {})
+                        };
+                        playCategoryStation(station);
+                    });
+                    
+                    itemsContainer.appendChild(stationCard);
+                } else if (fav.item_type === 'video') {
+                    // Create video card
+                    const videoCard = document.createElement('div');
+                    videoCard.className = 'result-item favorite-item';
+                    videoCard.style.cursor = 'pointer';
+                    videoCard.style.position = 'relative';
+                    videoCard.setAttribute('data-video-url', fav.item_url);
+                    
+                    // Try to get video thumbnail
+                    const videoId = fav.metadata?.id || getVideoIdFromUrl(fav.item_url);
+                    if (videoId) {
+                        const thumbnailContainer = document.createElement('div');
+                        thumbnailContainer.style.cssText = 'width: 120px; height: 68px; flex-shrink: 0; border-radius: 8px; overflow: hidden; background: #2a3a3f; position: relative;';
+                        
+                        const thumbnailImg = document.createElement('img');
+                        thumbnailImg.src = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+                        thumbnailImg.alt = fav.item_name;
+                        thumbnailImg.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
+                        thumbnailImg.onerror = function() {
+                            thumbnailContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; font-size: 2em;">▶</div>';
+                        };
+                        thumbnailContainer.appendChild(thumbnailImg);
+                        
+                        // Play icon overlay
+                        const playOverlay = document.createElement('div');
+                        playOverlay.style.cssText = 'position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #ffffff; font-size: 1.5em; opacity: 0.8;';
+                        playOverlay.innerHTML = '▶';
+                        thumbnailContainer.appendChild(playOverlay);
+                        
+                        videoCard.appendChild(thumbnailContainer);
+                    }
+                    
+                    const textContent = document.createElement('div');
+                    textContent.style.cssText = 'flex: 1; padding: 0 12px; min-width: 0;';
+                    
+                    const title = document.createElement('h3');
+                    title.textContent = fav.item_name;
+                    title.style.cssText = 'color: #ffffff; margin-bottom: 6px; font-size: 0.95em; font-weight: 500; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;';
+                    
+                    const duration = document.createElement('p');
+                    duration.textContent = fav.metadata?.duration ? `Duration: ${formatDuration(fav.metadata.duration)}` : '';
+                    duration.style.cssText = 'color: #88aabb; font-size: 0.85em;';
+                    
+                    textContent.appendChild(title);
+                    if (duration.textContent) {
+                        textContent.appendChild(duration);
+                    }
+                    
+                    videoCard.style.cssText += 'display: flex; align-items: center; gap: 12px;';
+                    videoCard.appendChild(textContent);
+                    
+                    // Add heart button (already favorited)
+                    const heartBtn = createHeartButton('video', fav.item_id, true);
+                    videoCard.appendChild(heartBtn);
+                    heartBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        await toggleFavorite(heartBtn, 'video', fav.item_id, fav.item_name, fav.item_url, category, fav.logo_url, fav.metadata);
+                        // Reload favorites after removal
+                        if (!heartBtn.classList.contains('favorite')) {
+                            loadFavorites();
+                        }
+                    });
+                    
+                    videoCard.addEventListener('click', () => {
+                        currentVideoId = videoId;
+                        currentVideoUrl = fav.item_url;
+                        currentVideoTitle = fav.item_name;
+                        currentVideoDuration = fav.metadata?.duration;
+                        
+                        updateVideoThumbnail(currentVideoId);
+                        updateNowPlayingTitle(fav.item_name);
+                        highlightCurrentVideo(fav.item_url);
+                        
+                        if (currentVideoDuration && totalTimeDisplay) {
+                            totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
+                        }
+                        
+                        loadStream(fav.item_url);
+                    });
+                    
+                    itemsContainer.appendChild(videoCard);
+                }
+            });
+            
+            categorySection.appendChild(itemsContainer);
+            searchResults.appendChild(categorySection);
+        });
+    } catch (error) {
+        console.error('Error loading favorites:', error);
+        searchResults.innerHTML = '<div class="error">Failed to load favorites. Please try again.</div>';
+    }
+}
+
 // Initialize auth on page load
 checkAuthStatus();
 
@@ -529,6 +751,9 @@ prevBtn.addEventListener('click', () => {
     if (currentIndex > 0) {
         currentIndex--;
         const prevVideo = playlist[currentIndex];
+        // Clear station state when switching to video
+        currentStation = null;
+        
         currentVideoUrl = prevVideo.url;
         currentVideoDuration = prevVideo.duration;
         currentVideoTitle = prevVideo.title;
@@ -1300,13 +1525,35 @@ searchBtn.addEventListener('click', () => {
     if (!query) {
         return;
     }
+    
+    // Switch to search view - hide category sections and show search results
+    countriesSection.style.display = 'none';
+    genresSection.style.display = 'none';
+    stationsSection.style.display = 'none';
+    
+    // Clear active category button
+    categoryButtons.forEach(b => b.classList.remove('active'));
+    activeCategory = null;
+    
     searchYouTube(query);
 });
 
 // Enter key support for search
 searchQueryInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
-        searchBtn.click();
+        const query = searchQueryInput.value.trim();
+        if (query) {
+            // Switch to search view - hide category sections and show search results
+            countriesSection.style.display = 'none';
+            genresSection.style.display = 'none';
+            stationsSection.style.display = 'none';
+            
+            // Clear active category button
+            categoryButtons.forEach(b => b.classList.remove('active'));
+            activeCategory = null;
+            
+            searchYouTube(query);
+        }
     }
 });
 
@@ -1626,6 +1873,11 @@ function showCategoryStations(category) {
 
 // Display category stations in search results
 function displayCategoryStations(stations, category) {
+    // Ensure search results container is visible
+    if (searchResults) {
+        searchResults.style.display = '';
+    }
+    
     // Build all station cards first in a document fragment to avoid flickering
     const fragment = document.createDocumentFragment();
     
@@ -1714,9 +1966,11 @@ async function playCategoryStation(station) {
         // Update player UI
         currentStation = station; // Store current station
         currentVideoId = null; // Clear video ID
+        currentVideoUrl = null; // Clear video URL
+        currentVideoTitle = null; // Clear video title
         nowPlayingTitle.textContent = station.name;
         updatePageTitle(station.name); // Update page title
-        updateVideoThumbnail(null, station); // Show station logo
+        updateVideoThumbnail(null, station); // Show station logo and update favicon
         
         // Load and play the stream
         await loadStream(station.url);
@@ -1750,10 +2004,11 @@ async function playRadioStation(station) {
         // Update player UI
         currentStation = station; // Store current station
         currentVideoId = null; // Clear video ID
+        currentVideoUrl = null; // Clear video URL
+        currentVideoTitle = null; // Clear video title
         nowPlayingTitle.textContent = station.name;
         updatePageTitle(station.name); // Update page title
-        updateVideoThumbnail(null, station); // Show station logo
-        updateTabFaviconFromMedia(station, null); // Update favicon
+        updateVideoThumbnail(null, station); // Show station logo and update favicon
         
         // Try to load and play the stream
         try {
@@ -2043,6 +2298,16 @@ function createSkeletonScreen() {
 
 // Search YouTube
 async function searchYouTube(query) {
+    // Ensure search results container is visible
+    if (searchResults) {
+        searchResults.style.display = '';
+    }
+    
+    // Hide all category sections
+    if (countriesSection) countriesSection.style.display = 'none';
+    if (genresSection) genresSection.style.display = 'none';
+    if (stationsSection) stationsSection.style.display = 'none';
+    
     // Show skeleton screen
     createSkeletonScreen();
     
@@ -2164,6 +2429,9 @@ function loadMoreVideos() {
             currentIndex = allSearchVideos.findIndex(v => v.url === video.url);
             if (currentIndex === -1) currentIndex = absoluteIndex;
             
+            // Clear station state when switching to video
+            currentStation = null;
+            
             // Keep search results visible - don't clear them
             currentVideoUrl = video.url;
             currentVideoDuration = video.duration; // Store duration from search results
@@ -2178,7 +2446,7 @@ function loadMoreVideos() {
                 id: v.id || getVideoIdFromUrl(v.url)
             }));
             
-            // Update thumbnail and title
+            // Update thumbnail and title (this will also update favicon)
             updateVideoThumbnail(currentVideoId);
             updateNowPlayingTitle(video.title);
             
@@ -2308,6 +2576,7 @@ function updateTabFaviconFromMedia(stationLogo, videoId) {
         // Get station logo from various possible fields
         const logoUrl = station.favicon || station.logo || station.favicon_url || station.image;
         if (logoUrl && isValidImageUrl(logoUrl)) {
+            console.log('🎨 Updating favicon to station logo:', logoUrl);
             updateTabFavicon(logoUrl);
             return;
         }
@@ -2318,11 +2587,13 @@ function updateTabFaviconFromMedia(stationLogo, videoId) {
     if (vidId) {
         // For YouTube videos, use the video thumbnail as favicon
         const thumbnailUrl = `https://img.youtube.com/vi/${vidId}/default.jpg`;
+        console.log('🎨 Updating favicon to video thumbnail:', thumbnailUrl);
         updateTabFavicon(thumbnailUrl);
         return;
     }
     
     // No media playing, revert to default favicon
+    console.log('🎨 Reverting to default favicon');
     updateTabFavicon(null);
 }
 
@@ -2600,6 +2871,10 @@ if (loginBtn) {
         isLoginMode = true;
         authTitle.textContent = 'Login';
         signupFields.style.display = 'none';
+        // Remove required attribute from email when hidden
+        if (authEmail) {
+            authEmail.removeAttribute('required');
+        }
         authSubmitBtn.textContent = 'Login';
         authToggle.textContent = "Don't have an account? Sign up";
         authModal.style.display = 'block';
@@ -2613,6 +2888,10 @@ if (signupBtn) {
         isLoginMode = false;
         authTitle.textContent = 'Sign Up';
         signupFields.style.display = 'block';
+        // Add required attribute to email when visible
+        if (authEmail) {
+            authEmail.setAttribute('required', 'required');
+        }
         authSubmitBtn.textContent = 'Sign Up';
         authToggle.textContent = 'Already have an account? Login';
         authModal.style.display = 'block';
@@ -2650,11 +2929,19 @@ if (authToggle) {
         if (isLoginMode) {
             authTitle.textContent = 'Login';
             signupFields.style.display = 'none';
+            // Remove required attribute from email when hidden
+            if (authEmail) {
+                authEmail.removeAttribute('required');
+            }
             authSubmitBtn.textContent = 'Login';
             authToggle.textContent = "Don't have an account? Sign up";
         } else {
             authTitle.textContent = 'Sign Up';
             signupFields.style.display = 'block';
+            // Add required attribute to email when visible
+            if (authEmail) {
+                authEmail.setAttribute('required', 'required');
+            }
             authSubmitBtn.textContent = 'Sign Up';
             authToggle.textContent = 'Already have an account? Login';
         }
@@ -2666,6 +2953,12 @@ if (authToggle) {
 if (authFormElement) {
     authFormElement.addEventListener('submit', async (e) => {
         e.preventDefault();
+        
+        // Temporarily remove required from hidden fields to prevent validation errors
+        if (isLoginMode && authEmail) {
+            authEmail.removeAttribute('required');
+        }
+        
         const username = authUsername.value.trim();
         const password = authPassword.value.trim();
         
@@ -2678,6 +2971,10 @@ if (authFormElement) {
         if (isLoginMode) {
             await login(username, password);
         } else {
+            // Ensure email is required in signup mode
+            if (authEmail) {
+                authEmail.setAttribute('required', 'required');
+            }
             const email = authEmail.value.trim();
             if (!email) {
                 authError.textContent = 'Please fill in all fields';
@@ -2691,7 +2988,13 @@ if (authFormElement) {
         if (currentUser) {
             authUsername.value = '';
             authPassword.value = '';
-            authEmail.value = '';
+            if (authEmail) authEmail.value = '';
+            // Reset required attributes
+            if (authEmail && !isLoginMode) {
+                authEmail.setAttribute('required', 'required');
+            } else if (authEmail) {
+                authEmail.removeAttribute('required');
+            }
         }
     });
 }
