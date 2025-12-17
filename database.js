@@ -65,15 +65,29 @@ function initDatabase() {
     });
 }
 
+// Helper function to get database connection
+function getDatabase() {
+    return new Promise((resolve, reject) => {
+        const db = new sqlite3.Database(DB_PATH, (err) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(db);
+            }
+        });
+    });
+}
+
 // User functions
 async function createUser(username, email, password) {
-    const db = await initDatabase();
+    const db = await getDatabase();
     return new Promise((resolve, reject) => {
         const hashedPassword = bcrypt.hashSync(password, 10);
         db.run(
             'INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
             [username, email, hashedPassword],
             function(err) {
+                db.close();
                 if (err) {
                     if (err.message.includes('UNIQUE constraint')) {
                         reject(new Error('Username or email already exists'));
@@ -89,9 +103,10 @@ async function createUser(username, email, password) {
 }
 
 async function getUserByUsername(username) {
-    const db = await initDatabase();
+    const db = await getDatabase();
     return new Promise((resolve, reject) => {
         db.get('SELECT * FROM users WHERE username = ?', [username], (err, row) => {
+            db.close();
             if (err) {
                 reject(err);
             } else {
@@ -102,9 +117,10 @@ async function getUserByUsername(username) {
 }
 
 async function getUserById(userId) {
-    const db = await initDatabase();
+    const db = await getDatabase();
     return new Promise((resolve, reject) => {
         db.get('SELECT id, username, email, created_at FROM users WHERE id = ?', [userId], (err, row) => {
+            db.close();
             if (err) {
                 reject(err);
             } else {
@@ -120,7 +136,7 @@ async function verifyPassword(user, password) {
 
 // Favorites functions
 async function addFavorite(userId, itemType, itemId, itemName, itemUrl, category, logoUrl, metadata) {
-    const db = await initDatabase();
+    const db = await getDatabase();
     return new Promise((resolve, reject) => {
         const metadataStr = metadata ? JSON.stringify(metadata) : null;
         db.run(
@@ -134,6 +150,7 @@ async function addFavorite(userId, itemType, itemId, itemName, itemUrl, category
              metadata = excluded.metadata`,
             [userId, itemType, itemId, itemName, itemUrl, category || null, logoUrl || null, metadataStr],
             function(err) {
+                db.close();
                 if (err) {
                     reject(err);
                 } else {
@@ -145,12 +162,13 @@ async function addFavorite(userId, itemType, itemId, itemName, itemUrl, category
 }
 
 async function removeFavorite(userId, itemType, itemId) {
-    const db = await initDatabase();
+    const db = await getDatabase();
     return new Promise((resolve, reject) => {
         db.run(
             'DELETE FROM favorites WHERE user_id = ? AND item_type = ? AND item_id = ?',
             [userId, itemType, itemId],
             function(err) {
+                db.close();
                 if (err) {
                     reject(err);
                 } else {
@@ -162,7 +180,7 @@ async function removeFavorite(userId, itemType, itemId) {
 }
 
 async function getFavorites(userId, category = null) {
-    const db = await initDatabase();
+    const db = await getDatabase();
     return new Promise((resolve, reject) => {
         let query = 'SELECT * FROM favorites WHERE user_id = ?';
         const params = [userId];
@@ -175,6 +193,7 @@ async function getFavorites(userId, category = null) {
         query += ' ORDER BY created_at DESC';
         
         db.all(query, params, (err, rows) => {
+            db.close();
             if (err) {
                 reject(err);
             } else {
@@ -190,12 +209,13 @@ async function getFavorites(userId, category = null) {
 }
 
 async function getFavoritesByCategory(userId) {
-    const db = await initDatabase();
+    const db = await getDatabase();
     return new Promise((resolve, reject) => {
         db.all(
             'SELECT * FROM favorites WHERE user_id = ? ORDER BY category, created_at DESC',
             [userId],
             (err, rows) => {
+                db.close();
                 if (err) {
                     reject(err);
                 } else {
@@ -219,12 +239,13 @@ async function getFavoritesByCategory(userId) {
 }
 
 async function isFavorite(userId, itemType, itemId) {
-    const db = await initDatabase();
+    const db = await getDatabase();
     return new Promise((resolve, reject) => {
         db.get(
             'SELECT id FROM favorites WHERE user_id = ? AND item_type = ? AND item_id = ?',
             [userId, itemType, itemId],
             (err, row) => {
+                db.close();
                 if (err) {
                     reject(err);
                 } else {
@@ -247,4 +268,7 @@ module.exports = {
     getFavoritesByCategory,
     isFavorite
 };
+
+
+
 

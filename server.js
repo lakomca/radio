@@ -1124,6 +1124,203 @@ app.get('/api/radio/stream/:stationId', async (req, res) => {
     }
 });
 
+// ===== AUTHENTICATION ENDPOINTS =====
+
+// Middleware to check if user is authenticated
+function requireAuth(req, res, next) {
+    if (req.session && req.session.userId) {
+        next();
+    } else {
+        res.status(401).json({ error: 'Unauthorized' });
+    }
+}
+
+// Initialize database on startup
+(async () => {
+    try {
+        await db.initDatabase();
+        console.log('✅ Database initialized');
+    } catch (err) {
+        console.error('❌ Failed to initialize database:', err);
+    }
+})();
+
+// Signup endpoint
+app.post('/api/auth/signup', async (req, res) => {
+    try {
+        const { username, email, password } = req.body;
+        
+        if (!username || !email || !password) {
+            return res.status(400).json({ error: 'Username, email, and password are required' });
+        }
+        
+        if (password.length < 6) {
+            return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+        }
+        
+        const user = await db.createUser(username, email, password);
+        
+        // Set session
+        req.session.userId = user.id;
+        req.session.username = user.username;
+        
+        res.json({
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email
+            }
+        });
+    } catch (error) {
+        console.error('Signup error:', error);
+        if (error.message.includes('already exists')) {
+            res.status(400).json({ error: error.message });
+        } else {
+            res.status(500).json({ error: 'Signup failed', details: error.message });
+        }
+    }
+});
+
+// Login endpoint
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        
+        if (!username || !password) {
+            return res.status(400).json({ error: 'Username and password are required' });
+        }
+        
+        const user = await db.getUserByUsername(username);
+        
+        if (!user) {
+            return res.status(401).json({ error: 'Invalid username or password' });
+        }
+        
+        const isValid = await db.verifyPassword(user, password);
+        
+        if (!isValid) {
+            return res.status(401).json({ error: 'Invalid username or password' });
+        }
+        
+        // Set session
+        req.session.userId = user.id;
+        req.session.username = user.username;
+        
+        res.json({
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email
+            }
+        });
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({ error: 'Login failed', details: error.message });
+    }
+});
+
+// Logout endpoint
+app.post('/api/auth/logout', (req, res) => {
+    req.session.destroy((err) => {
+        if (err) {
+            console.error('Logout error:', err);
+            return res.status(500).json({ error: 'Logout failed' });
+        }
+        res.clearCookie('connect.sid');
+        res.json({ success: true });
+    });
+});
+
+// Get current user endpoint
+app.get('/api/auth/me', async (req, res) => {
+    try {
+        if (req.session && req.session.userId) {
+            const user = await db.getUserById(req.session.userId);
+            if (user) {
+                return res.json({ user });
+            }
+        }
+        res.status(401).json({ error: 'Not authenticated' });
+    } catch (error) {
+        console.error('Auth status error:', error);
+        res.status(500).json({ error: 'Failed to check authentication status' });
+    }
+});
+
+// ===== FAVORITES ENDPOINTS =====
+
+// Get favorites (grouped by category)
+app.get('/api/favorites', requireAuth, async (req, res) => {
+    try {
+        const favorites = await db.getFavoritesByCategory(req.session.userId);
+        res.json({ favoritesByCategory: favorites });
+    } catch (error) {
+        console.error('Get favorites error:', error);
+        res.status(500).json({ error: 'Failed to fetch favorites', details: error.message });
+    }
+});
+
+// Check if item is favorite
+app.get('/api/favorites/check', requireAuth, async (req, res) => {
+    try {
+        const { itemType, itemId } = req.query;
+        
+        if (!itemType || !itemId) {
+            return res.status(400).json({ error: 'itemType and itemId are required' });
+        }
+        
+        const isFavorite = await db.isFavorite(req.session.userId, itemType, itemId);
+        res.json({ isFavorite });
+    } catch (error) {
+        console.error('Check favorite error:', error);
+        res.status(500).json({ error: 'Failed to check favorite status', details: error.message });
+    }
+});
+
+// Add favorite
+app.post('/api/favorites', requireAuth, async (req, res) => {
+    try {
+        const { itemType, itemId, itemName, itemUrl, category, logoUrl, metadata } = req.body;
+        
+        if (!itemType || !itemId || !itemName || !itemUrl) {
+            return res.status(400).json({ error: 'itemType, itemId, itemName, and itemUrl are required' });
+        }
+        
+        await db.addFavorite(
+            req.session.userId,
+            itemType,
+            itemId,
+            itemName,
+            itemUrl,
+            category,
+            logoUrl,
+            metadata
+        );
+        
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Add favorite error:', error);
+        res.status(500).json({ error: 'Failed to add favorite', details: error.message });
+    }
+});
+
+// Remove favorite
+app.delete('/api/favorites', requireAuth, async (req, res) => {
+    try {
+        const { itemType, itemId } = req.body;
+        
+        if (!itemType || !itemId) {
+            return res.status(400).json({ error: 'itemType and itemId are required' });
+        }
+        
+        await db.removeFavorite(req.session.userId, itemType, itemId);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Remove favorite error:', error);
+        res.status(500).json({ error: 'Failed to remove favorite', details: error.message });
+    }
+});
+
 // Favicon endpoint (to prevent 404 errors)
 app.get('/favicon.ico', (req, res) => {
     res.status(204).end();
@@ -1186,8 +1383,13 @@ app.get('/diagnostics', async (req, res) => {
 
 // Catch-all route for SPA - serve index.html for any non-API routes
 app.get('*', (req, res) => {
-    // Don't serve index.html for API routes
-    if (req.path.startsWith('/stream') || req.path.startsWith('/search') || req.path.startsWith('/health')) {
+    // Don't serve index.html for API routes or other non-page routes
+    if (req.path.startsWith('/api/') || 
+        req.path.startsWith('/stream') || 
+        req.path.startsWith('/search') || 
+        req.path.startsWith('/health') ||
+        req.path.startsWith('/diagnostics') ||
+        req.path === '/favicon.ico') {
         return res.status(404).json({ error: 'Not found' });
     }
     res.sendFile(path.join(__dirname, 'public', 'index.html'));

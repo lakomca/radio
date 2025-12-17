@@ -10,6 +10,9 @@ firebase-debug.log
 firestore-debug.log
 ui-debug.log
 
+# Database files
+data/
+
 # Large binary files (should be installed via package managers)
 *.exe
 bin/

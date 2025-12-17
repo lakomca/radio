@@ -73,11 +73,19 @@ let allSearchVideos = []; // Store all search results
 // Check authentication status on page load
 async function checkAuthStatus() {
     try {
-        const response = await fetch('/api/auth/me');
+        const response = await fetch('/api/auth/me', {
+            credentials: 'include'
+        });
         if (response.ok) {
-            const data = await response.json();
-            currentUser = data.user;
-            updateAuthUI();
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                const data = await response.json();
+                currentUser = data.user;
+                updateAuthUI();
+            } else {
+                currentUser = null;
+                updateAuthUI();
+            }
         } else {
             currentUser = null;
             updateAuthUI();
@@ -110,6 +118,12 @@ async function login(username, password) {
             credentials: 'include',
             body: JSON.stringify({ username, password })
         });
+        
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            throw new Error('Server did not return JSON response');
+        }
+        
         const data = await response.json();
         if (response.ok) {
             currentUser = data.user;
@@ -139,6 +153,12 @@ async function signup(username, email, password) {
             credentials: 'include',
             body: JSON.stringify({ username, email, password })
         });
+        
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            throw new Error('Server did not return JSON response');
+        }
+        
         const data = await response.json();
         if (response.ok) {
             currentUser = data.user;
@@ -1540,6 +1560,30 @@ function displayStations(stations) {
             
             stationItem.appendChild(logoContainer);
             stationItem.appendChild(stationInfo);
+            
+            // Add heart button if user is logged in
+            if (currentUser) {
+                const itemId = station.stationuuid || station.url_resolved || station.url || station.name;
+                checkIfFavorite('station', itemId).then(isFav => {
+                    const heartBtn = createHeartButton('station', itemId, isFav);
+                    stationItem.style.position = 'relative';
+                    stationItem.appendChild(heartBtn);
+                    heartBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        const category = currentGenre ? 'music' : 'international';
+                        await toggleFavorite(
+                            heartBtn, 
+                            'station', 
+                            itemId, 
+                            station.name, 
+                            station.url_resolved || station.url, 
+                            category, 
+                            station.favicon || station.logo, 
+                            station
+                        );
+                    });
+                });
+            }
             
             stationItem.addEventListener('click', () => {
                 playRadioStation(station);
