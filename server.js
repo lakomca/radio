@@ -497,6 +497,13 @@ app.get('/stream', (req, res) => {
 
         // Handle stream end
         ffmpeg.on('close', (code) => {
+            // If the client disconnected (common when switching tracks), ffmpeg will be killed and may exit non-zero.
+            // Treat that as normal to avoid confusing "404/invalid URL" logs.
+            if (clientDisconnected) {
+                console.log(`FFmpeg exited with code ${code} (client disconnected)`);
+                return;
+            }
+            
             console.log(`FFmpeg process exited with code ${code}`);
             // Code 0 is normal exit, code 1 might be error but could also be end of stream
             // Code 8 typically means input file error (like 404)

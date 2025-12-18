@@ -1083,6 +1083,25 @@ body {
     fill: #ff1744;
 }
 
+/* Player favorite button (in controls row) */
+.player-favorite-btn {
+    background: rgba(0, 0, 0, 0.25);
+}
+
+.player-favorite-btn svg {
+    fill: #88aabb;
+    transition: fill 0.2s, transform 0.2s;
+}
+
+.player-favorite-btn.favorite svg {
+    fill: #ff1744;
+}
+
+.player-favorite-btn:hover svg {
+    fill: #ff1744;
+    transform: scale(1.05);
+}
+
 .station-item,
 .result-item {
     position: relative;

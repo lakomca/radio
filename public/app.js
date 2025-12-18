@@ -5,6 +5,7 @@ const nextBtn = document.getElementById('nextBtn');
 const stopBtn = document.getElementById('stopBtn');
 const repeatBtn = document.getElementById('repeatBtn');
 const autoplayBtn = document.getElementById('autoplayBtn');
+const playerFavoriteBtn = document.getElementById('playerFavoriteBtn');
 const volumeSlider = document.getElementById('volumeSlider');
 const volumeBtn = document.getElementById('volumeBtn');
 const volumeSliderContainer = document.getElementById('volumeSliderContainer');
@@ -15,8 +16,7 @@ const playIcon = document.getElementById('playIcon');
 const pauseIcon = document.getElementById('pauseIcon');
 const repeatIcon = document.getElementById('repeatIcon');
 const repeatOneIcon = document.getElementById('repeatOneIcon');
-const autoplayOnIcon = document.getElementById('autoplayOnIcon');
-const autoplayOffIcon = document.getElementById('autoplayOffIcon');
+// Autoplay UI removed (kept autoplayEnabled internally for playlist flows)
 const customProgressBar = document.getElementById('customProgressBar');
 const progressFill = document.getElementById('progressFill');
 const progressThumb = document.getElementById('progressThumb');
@@ -64,7 +64,9 @@ let lastCurrentTime = 0;
 let streamStartTime = null; // Track when stream started
 let connectionQuality = 'good'; // 'good', 'fair', 'poor'
 let reconnectAttempts = 0;
-let maxReconnectAttempts = 5;
+// Option A (stability): don't hard-stop after a few retries during long listening sessions.
+// We'll keep retrying with backoff instead of showing a "connection failed" alert.
+let maxReconnectAttempts = 999999;
 let adaptiveBufferTarget = 5; // Target buffer in seconds (adaptive)
 let allSearchVideos = []; // Store all search results
 
@@ -106,6 +108,10 @@ function updateAuthUI() {
     } else {
         authButtons.style.display = 'flex';
         userProfile.style.display = 'none';
+    }
+    // Keep player favorite button state in sync with auth state
+    if (typeof refreshPlayerFavoriteButton === 'function') {
+        refreshPlayerFavoriteButton();
     }
 }
 
@@ -332,6 +338,73 @@ async function loadFavorites() {
             return aIndex - bIndex;
         });
         
+        // Build a flattened list so user can "Play Favorites" as a playlist
+        const flattenedFavorites = categories.flatMap(cat => (favoritesByCategory[cat] || []).map(f => ({ ...f, _category: cat })));
+
+        // Add a top toolbar for favorites playback
+        const favoritesToolbar = document.createElement('div');
+        favoritesToolbar.style.cssText = 'display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 18px;';
+
+        const toolbarTitle = document.createElement('div');
+        toolbarTitle.style.cssText = 'color: #ffffff; font-weight: 600; font-size: 1.1em;';
+        toolbarTitle.textContent = 'Your Favorites';
+
+        const playFavoritesBtn = document.createElement('button');
+        playFavoritesBtn.className = 'auth-btn';
+        playFavoritesBtn.textContent = 'Play Favorites';
+        playFavoritesBtn.style.cssText = 'padding: 10px 14px;';
+
+        playFavoritesBtn.addEventListener('click', async () => {
+            if (!flattenedFavorites.length) return;
+            playbackMode = 'favorites';
+
+            // Convert favorites into playlist items compatible with next/prev flow
+            playlist = flattenedFavorites.map(f => ({
+                title: f.item_name,
+                url: f.item_url,
+                duration: f.metadata?.duration || null,
+                id: f.metadata?.id || null,
+                type: f.item_type,
+                category: f._category,
+                logo_url: f.logo_url || null,
+                item_id: f.item_id
+            }));
+
+            currentIndex = 0;
+            const first = playlist[0];
+
+            if (first.type === 'station') {
+                // Play station; keep playing until user hits Next
+                const station = {
+                    name: first.title,
+                    url: first.url,
+                    url_resolved: first.url,
+                    favicon: first.logo_url,
+                    logo: first.logo_url,
+                    stationuuid: first.item_id
+                };
+                await playCategoryStation(station);
+            } else {
+                currentStation = null;
+                currentVideoUrl = first.url;
+                currentVideoTitle = first.title;
+                currentVideoDuration = first.duration;
+                currentVideoId = first.id || getVideoIdFromUrl(first.url);
+
+                updateVideoThumbnail(currentVideoId);
+                updateNowPlayingTitle(first.title);
+                highlightCurrentVideo(first.url);
+                if (currentVideoDuration && totalTimeDisplay) {
+                    totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
+                }
+                loadStream(first.url);
+            }
+        });
+
+        favoritesToolbar.appendChild(toolbarTitle);
+        favoritesToolbar.appendChild(playFavoritesBtn);
+        searchResults.appendChild(favoritesToolbar);
+
         categories.forEach(category => {
             const favorites = favoritesByCategory[category];
             if (!favorites || favorites.length === 0) return;
@@ -544,9 +617,9 @@ function updateConnectionQuality(bufferedAhead, downloadSpeed) {
 // Automatic reconnection function - retries stream with increased buffering
 async function reconnectStream() {
     if (reconnectAttempts >= maxReconnectAttempts) {
-        console.error(`❌ Max reconnection attempts (${maxReconnectAttempts}) reached. Stopping.`);
-        alert('Stream connection failed. Please try refreshing the page or selecting a different stream.');
-        return;
+        // Never hard-stop in Option A mode; just keep trying.
+        console.warn(`⚠️ Max reconnection attempts (${maxReconnectAttempts}) reached. Resetting counter and continuing retries.`);
+        reconnectAttempts = 0;
     }
     
     reconnectAttempts++;
@@ -557,7 +630,8 @@ async function reconnectStream() {
     connectionQuality = 'poor';
     
     // Wait a bit before retrying (exponential backoff)
-    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 5000);
+    // Cap increases to avoid hammering the server during long outages.
+    const delay = Math.min(1000 * Math.pow(2, Math.min(reconnectAttempts - 1, 6)), 30000); // max 30s
     console.log(`⏳ Waiting ${delay}ms before reconnection...`);
     
     await new Promise(resolve => setTimeout(resolve, delay));
@@ -573,7 +647,9 @@ async function reconnectStream() {
 let displayedVideosCount = 0; // Track how many videos are currently displayed
 const VIDEOS_PER_BATCH = 9; // Number of videos to load per batch
 let loadMoreBtn = null; // Reference to load more button
-let autoplayEnabled = true; // Autoplay is enabled by default
+// Autoplay toggle removed from UI; we keep autoplayEnabled true for playlist/video flows.
+let autoplayEnabled = true;
+let playbackMode = 'normal'; // 'normal' | 'favorites'
 let repeatMode = 0; // 0 = off, 1 = repeat all, 2 = repeat one
 let isHandlingEnded = false; // Prevent multiple ended handlers from running simultaneously
 let isSeeking = false; // Track if user is seeking on progress bar
@@ -776,17 +852,32 @@ nextBtn.addEventListener('click', async () => {
         if (currentIndex < playlist.length - 1) {
             currentIndex++;
             const nextVideo = playlist[currentIndex];
-            currentVideoUrl = nextVideo.url;
-            currentVideoDuration = nextVideo.duration;
-            currentVideoTitle = nextVideo.title;
-            currentVideoId = nextVideo.id || getVideoIdFromUrl(nextVideo.url);
-            updateVideoThumbnail(currentVideoId);
-            updateNowPlayingTitle(nextVideo.title);
-            highlightCurrentVideo(nextVideo.url);
-            if (currentVideoDuration && totalTimeDisplay) {
-                totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
+            // Favorites playlist can include stations + videos
+            if (playbackMode === 'favorites' && nextVideo.type === 'station') {
+                const station = {
+                    name: nextVideo.title,
+                    url: nextVideo.url,
+                    url_resolved: nextVideo.url,
+                    favicon: nextVideo.logo_url,
+                    logo: nextVideo.logo_url,
+                    stationuuid: nextVideo.item_id
+                };
+                await playCategoryStation(station);
+            } else {
+                // Video
+                currentStation = null;
+                currentVideoUrl = nextVideo.url;
+                currentVideoDuration = nextVideo.duration;
+                currentVideoTitle = nextVideo.title;
+                currentVideoId = nextVideo.id || getVideoIdFromUrl(nextVideo.url);
+                updateVideoThumbnail(currentVideoId);
+                updateNowPlayingTitle(nextVideo.title);
+                highlightCurrentVideo(nextVideo.url);
+                if (currentVideoDuration && totalTimeDisplay) {
+                    totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
+                }
+                loadStream(nextVideo.url);
             }
-            loadStream(nextVideo.url);
             updateNavigationButtons();
             return;
         }
@@ -930,26 +1021,112 @@ repeatBtn.addEventListener('click', () => {
 });
 
 // Autoplay button functionality
-autoplayBtn.addEventListener('click', () => {
-    autoplayEnabled = !autoplayEnabled;
-    
-    if (autoplayEnabled) {
-        autoplayBtn.classList.add('active');
-        autoplayBtn.classList.remove('inactive');
-        autoplayOnIcon.style.display = 'block';
-        autoplayOffIcon.style.display = 'none';
-        autoplayBtn.title = 'Autoplay: ON';
-    } else {
-        autoplayBtn.classList.remove('active');
-        autoplayBtn.classList.add('inactive');
-        autoplayOnIcon.style.display = 'none';
-        autoplayOffIcon.style.display = 'block';
-        autoplayBtn.title = 'Autoplay: OFF';
+// Autoplay button removed from UI; keep this guard so older markup doesn't break.
+if (autoplayBtn) {
+    autoplayBtn.style.display = 'none';
+}
+
+function getCurrentPlayableForFavorite() {
+    // Station playing
+    if (currentStation && (currentStation.url || currentStation.url_resolved)) {
+        const itemId = currentStation.stationuuid || currentStation.url_resolved || currentStation.url || currentStation.name;
+        return {
+            itemType: 'station',
+            itemId,
+            itemName: currentStation.name || 'Station',
+            itemUrl: currentStation.url_resolved || currentStation.url,
+            category: activeCategory || (currentGenre ? 'music' : 'international'),
+            logoUrl: currentStation.favicon || currentStation.logo || currentStation.favicon_url || null,
+            metadata: currentStation
+        };
     }
-});
+    // Video playing
+    if (currentVideoUrl) {
+        const vidId = currentVideoId || getVideoIdFromUrl(currentVideoUrl);
+        const itemId = vidId || currentVideoUrl;
+        return {
+            itemType: 'video',
+            itemId,
+            itemName: currentVideoTitle || 'Video',
+            itemUrl: currentVideoUrl,
+            category: 'search',
+            logoUrl: vidId ? `https://img.youtube.com/vi/${vidId}/hqdefault.jpg` : null,
+            metadata: { id: vidId, duration: currentVideoDuration }
+        };
+    }
+    return null;
+}
+
+async function refreshPlayerFavoriteButton() {
+    if (!playerFavoriteBtn) return;
+    const playable = getCurrentPlayableForFavorite();
+    if (!currentUser || !playable) {
+        playerFavoriteBtn.classList.remove('favorite');
+        playerFavoriteBtn.disabled = !playable;
+        playerFavoriteBtn.title = playable ? 'Login to add to Favorites' : 'Nothing playing';
+        return;
+    }
+
+    const isFav = await checkIfFavorite(playable.itemType, playable.itemId);
+    playerFavoriteBtn.classList.toggle('favorite', !!isFav);
+    playerFavoriteBtn.disabled = false;
+    playerFavoriteBtn.title = isFav ? 'Remove from Favorites' : 'Add to Favorites';
+}
+
+if (playerFavoriteBtn) {
+    playerFavoriteBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!currentUser) {
+            alert('Please login to add favorites');
+            return;
+        }
+        const playable = getCurrentPlayableForFavorite();
+        if (!playable) return;
+        
+        // Use explicit add/remove logic for the player button (more reliable than reusing card logic)
+        const currentlyFav = playerFavoriteBtn.classList.contains('favorite');
+        let success = false;
+        if (currentlyFav) {
+            success = await removeFavorite(playable.itemType, playable.itemId);
+            if (success) {
+                playerFavoriteBtn.classList.remove('favorite');
+                playerFavoriteBtn.title = 'Add to Favorites';
+            }
+        } else {
+            success = await addFavorite(
+                playable.itemType,
+                playable.itemId,
+                playable.itemName,
+                playable.itemUrl,
+                playable.category,
+                playable.logoUrl,
+                playable.metadata
+            );
+            if (success) {
+                playerFavoriteBtn.classList.add('favorite');
+                playerFavoriteBtn.title = 'Remove from Favorites';
+            }
+        }
+        
+        if (!success) {
+            console.warn('Player favorite toggle failed', playable);
+        }
+
+        // If user is currently viewing favorites, refresh it.
+        if (activeCategory === 'favorites') {
+            loadFavorites();
+        }
+        
+        // Re-sync with backend in case IDs differ
+        refreshPlayerFavoriteButton();
+    });
+}
 
 
 // Load stream function
+// - YouTube URLs: stream via backend (/stream?url=...) so we can extract audio with yt-dlp + ffmpeg
+// - Non-YouTube URLs (radio stations): play directly in the browser audio element
 function loadStream(youtubeUrl) {
     // Prevent multiple simultaneous loads
     if (isLoading) {
@@ -965,9 +1142,13 @@ function loadStream(youtubeUrl) {
     
     playPauseBtn.disabled = true;
     
+    const isYouTubeSource = /(?:youtube\.com|youtu\.be)/i.test(youtubeUrl || '');
+    
     // Create stream URL
-    const streamUrl = `/stream?url=${encodeURIComponent(youtubeUrl)}`;
-    console.log('Stream URL:', streamUrl);
+    const streamUrl = isYouTubeSource
+        ? `/stream?url=${encodeURIComponent(youtubeUrl)}`
+        : youtubeUrl;
+    console.log('Stream URL:', streamUrl, `(direct=${!isYouTubeSource})`);
     
     // Check if we're reloading the same stream
     if (currentStreamUrl === streamUrl && !audioPlayer.paused) {
@@ -1000,8 +1181,10 @@ function loadStream(youtubeUrl) {
     
     // Reset reconnection attempts for new stream
     reconnectAttempts = 0;
-    adaptiveBufferTarget = 5; // Reset to default
     connectionQuality = 'good';
+    
+    // Prefer stability for YouTube (Option A): buffer longer, fewer restarts
+    adaptiveBufferTarget = isYouTubeSource ? 12 : 5; // seconds
     
     // Small delay to ensure reset is complete
     setTimeout(() => {
@@ -1013,7 +1196,10 @@ function loadStream(youtubeUrl) {
     
     // Track progress to detect if data is actually being received
     let hasReceivedData = false;
+    let hasStartedPlayback = false;
     let progressCheckInterval = null;
+    let timeoutIds = [];
+    let didCleanup = false;
     
     // Cleanup function for progress checking
     const cleanupProgressCheck = () => {
@@ -1022,48 +1208,38 @@ function loadStream(youtubeUrl) {
             progressCheckInterval = null;
         }
     };
+
+    const cleanupLoad = () => {
+        if (didCleanup) return;
+        didCleanup = true;
+        cleanupProgressCheck();
+        timeoutIds.forEach(id => clearTimeout(id));
+        timeoutIds = [];
+    };
     
     // Wait for metadata
+    // Option A: do NOT force immediate playback as soon as any bytes arrive.
+    // We only log progress here; actual play starts once we have enough buffer.
     audioPlayer.addEventListener('loadstart', () => {
         console.log('📡 Audio loadstart event');
         hasReceivedData = false;
+        hasStartedPlayback = false;
         cleanupProgressCheck(); // Clear any existing interval
         
-        // Start checking for data progress every 1 second (more frequent)
         progressCheckInterval = setInterval(() => {
-            if (isLoading) {
-                const buffered = audioPlayer.buffered;
-                const bufferedEnd = buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
-                
-                if (bufferedEnd > 0) {
-                    hasReceivedData = true;
-                    console.log(`📊 Data received: buffered ${bufferedEnd.toFixed(2)}s, readyState: ${audioPlayer.readyState}`);
-                    
-                    // If we have ANY buffered data and readyState >= 1, try to play
-                    // This is more aggressive - we try as soon as we have metadata and some data
-                    if (audioPlayer.readyState >= 1 && audioPlayer.paused) {
-                        console.log('Attempting playback with buffered data (readyState >= 1)');
-                        audioPlayer.play().then(() => {
-                            console.log('✅ Audio play started via progress check');
-        isLoading = false;
-                            updatePlayPauseButton(true);
-                            cleanupProgressCheck();
-                        }).catch(err => {
-                            console.error('❌ Play error in progress check:', err.message);
-                            // Don't give up yet - might just need more buffering
-                        });
-                    }
-                } else if (audioPlayer.readyState >= 1) {
-                    // We have metadata but no buffered data yet - log but don't play yet
-                    console.log(`⏳ Have metadata (readyState: ${audioPlayer.readyState}) but no buffered data yet...`);
-        } else {
-                    console.log(`⏳ Still waiting for data... readyState: ${audioPlayer.readyState}`);
-                }
-            } else {
-                // Stop checking if we're no longer loading
+            if (!isLoading) {
                 cleanupProgressCheck();
+                return;
             }
-        }, 1000); // Check every 1 second instead of 2
+            
+            const buffered = audioPlayer.buffered;
+            const bufferedEnd = buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
+            if (bufferedEnd > 0) {
+                hasReceivedData = true;
+                const bufferedAhead = bufferedEnd - (audioPlayer.currentTime || 0);
+                console.log(`📊 Buffer: ${bufferedAhead.toFixed(2)}s ahead (target: ${adaptiveBufferTarget}s), readyState: ${audioPlayer.readyState}`);
+            }
+        }, 1000);
     }, { once: true });
     
     audioPlayer.addEventListener('loadedmetadata', () => {
@@ -1080,24 +1256,6 @@ function loadStream(youtubeUrl) {
     audioPlayer.addEventListener('loadeddata', () => {
         console.log('✅ Audio data loaded, readyState:', audioPlayer.readyState);
         hasReceivedData = true;
-        // If canplay hasn't fired yet and we're loading, try to play
-        // Try with readyState >= 1 (HAVE_METADATA) - more aggressive
-        if (isLoading && audioPlayer.readyState >= 1) {
-            console.log('loadeddata: Attempting to start playback (readyState >= 1)');
-            setTimeout(() => {
-                if (isLoading && audioPlayer.readyState >= 1 && audioPlayer.paused) {
-                    audioPlayer.play().then(() => {
-                        console.log('✅ Audio play started via loadeddata');
-                        isLoading = false;
-                        updatePlayPauseButton(true);
-                        cleanupProgressCheck();
-                    }).catch(err => {
-                        console.error('❌ Play error in loadeddata:', err.message);
-                        // Don't give up - might just need more buffering
-                    });
-                }
-            }, 300);
-        }
     }, { once: true });
     
     // Progress event to track data download
@@ -1106,12 +1264,13 @@ function loadStream(youtubeUrl) {
             hasReceivedData = true;
             console.log('📥 Progress event - data is being received');
         }
-    });
+    }, { once: true });
     
     // Handle errors
+    // Option A: prefer buffering; but for long YouTube playback, do a SILENT reconnect (no alerts)
+    // instead of getting stuck after a couple tracks.
     audioPlayer.addEventListener('error', (e) => {
-        isLoading = false;
-        cleanupProgressCheck();
+        cleanupLoad();
         console.error('❌ Audio error:', e);
         console.error('Error code:', audioPlayer.error?.code);
         console.error('Error message:', audioPlayer.error?.message);
@@ -1131,19 +1290,33 @@ function loadStream(youtubeUrl) {
             };
             console.error('Error details:', errorMessages[audioPlayer.error.code] || 'Unknown error');
             
-            // MEDIA_ERR_NETWORK (2) or MEDIA_ERR_SRC_NOT_SUPPORTED (4) - try to reconnect
+            // If playback already started:
+            // - YouTube: attempt silent reconnect to keep long playlists going
+            // - Stations: let browser recover naturally
+            if (hasStartedPlayback) {
+                isLoading = false;
+                if (isYouTubeSource && (audioPlayer.error.code === 2 || audioPlayer.error.code === 3 || audioPlayer.error.code === 4)) {
+                    console.warn('🔄 Error after playback started (YouTube) — attempting silent reconnection...');
+                    reconnectStream();
+                } else {
+                    console.warn('⚠️ Error after playback started — not reconnecting (Option A).');
+                }
+                return;
+            }
+            
+            // Before playback starts, we can still attempt a reconnect if needed.
             if (audioPlayer.error.code === 2 || audioPlayer.error.code === 4) {
-                console.log('🔄 Network or source error detected, attempting reconnection...');
+                console.log('🔄 Network or source error before playback, attempting reconnection...');
                 reconnectStream();
             } else if (audioPlayer.error.code === 3) {
-                // MEDIA_ERR_DECODE - decoding error, might need to reload
-                console.log('🔄 Decoding error, attempting reconnection...');
+                console.log('🔄 Decoding error before playback, attempting reconnection...');
                 reconnectStream();
             }
         }
     }, { once: true });
     
-    // Timeout fallback - try multiple shorter timeouts
+    // Timeout fallback - for Option A we do NOT force play early.
+    // We only fail/reconnect if playback never starts.
     const timeoutChecks = [
         { time: 5000, message: '5s timeout check' },
         { time: 10000, message: '10s timeout check' },
@@ -1152,56 +1325,32 @@ function loadStream(youtubeUrl) {
     ];
     
     timeoutChecks.forEach(({ time, message }) => {
-        setTimeout(() => {
+        const id = setTimeout(() => {
             if (isLoading) {
                 const buffered = audioPlayer.buffered;
                 const bufferedTime = buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
                 console.warn(`⏱️ ${message} - checking if we can play anyway`);
                 console.warn(`  readyState: ${audioPlayer.readyState}, buffered: ${bufferedTime.toFixed(2)}s, hasReceivedData: ${hasReceivedData}`);
-                
-                // Try to play if we have ANY buffered data OR if readyState >= 1 (HAVE_METADATA)
-                // This is more aggressive - we try even with minimal data
-                if (audioPlayer.readyState >= 1 || bufferedTime > 0 || hasReceivedData) {
-                    console.log(`⏱️ ${message} - Attempting to play - readyState: ${audioPlayer.readyState}, buffered: ${bufferedTime.toFixed(2)}s`);
-                    audioPlayer.play().then(() => {
-                        console.log(`✅ Audio play started after ${message}`);
-                        isLoading = false;
-                        updatePlayPauseButton(true);
-                        cleanupProgressCheck();
-                    }).catch(err => {
-                        console.error(`❌ Play failed after ${message}:`, err.message);
-                        // Only give up on later timeouts (15s+)
-                        if (time >= 15000) {
-                            console.warn(`⏱️ ${message} - no data available, resetting loading flag`);
-                            isLoading = false;
-                            playPauseBtn.disabled = false;
-                            updatePlayPauseButton(false);
-                        }
-                    });
-                } else {
-                    // No data yet, but only give up on longer timeouts
-                    if (time >= 15000) {
-                        console.warn(`⏱️ ${message} - no data available, resetting loading flag`);
-                        isLoading = false;
-        playPauseBtn.disabled = false;
-        updatePlayPauseButton(false);
-                        cleanupProgressCheck();
-                    }
+                // Only give up/reconnect on longer timeouts IF playback never started.
+                if (!hasStartedPlayback && time >= 20000) {
+                    console.warn(`⏱️ ${message} - playback never started; attempting reconnection...`);
+                    reconnectStream();
                 }
             }
         }, time);
+        timeoutIds.push(id);
     });
     
     // Final timeout - give up after 25 seconds
-    setTimeout(() => {
-        cleanupProgressCheck();
+    timeoutIds.push(setTimeout(() => {
+        cleanupLoad();
         if (isLoading) {
             console.error('⏱️ Final timeout (25s) - giving up on loading');
             isLoading = false;
             playPauseBtn.disabled = false;
             updatePlayPauseButton(false);
         }
-    }, 25000);
+    }, 25000));
     
     // Auto-play when loaded - only for new streams
     const canplayHandler = () => {
@@ -1224,54 +1373,47 @@ function loadStream(youtubeUrl) {
             const bufferedEnd = buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
             const bufferedAhead = bufferedEnd - audioPlayer.currentTime;
             
-            // For quick start, play if we have at least 2 seconds buffer or readyState >= 3
-            const minBufferForQuickStart = 2;
-            if (bufferedAhead >= minBufferForQuickStart || audioPlayer.readyState >= 3) {
+            // Option A: require a larger initial buffer for YouTube to reduce early stalls.
+            const minInitialBuffer = isYouTubeSource ? Math.max(8, Math.floor(adaptiveBufferTarget * 0.7)) : 2;
+            if (bufferedAhead >= minInitialBuffer || (!isYouTubeSource && audioPlayer.readyState >= 3)) {
                 audioPlayer.play().then(() => {
-                    console.log(`✅ Audio play started (buffer: ${bufferedAhead.toFixed(2)}s)`);
+                    console.log(`✅ Audio play started (buffer: ${bufferedAhead.toFixed(2)}s, min: ${minInitialBuffer}s)`);
                     isLoading = false;
+                    hasStartedPlayback = true;
                     reconnectAttempts = 0; // Reset on successful play
                     updatePlayPauseButton(true);
-                    cleanupProgressCheck();
+                    cleanupLoad();
                 }).catch(err => {
                     console.error('❌ Play error:', err);
                     isLoading = false;
                     isHandlingEnded = false;
-                    cleanupProgressCheck();
+                    cleanupLoad();
                 });
             } else {
                 // Wait for more buffer
-                console.log(`⏳ Waiting for buffer (${bufferedAhead.toFixed(2)}s < ${minBufferForQuickStart}s)...`);
+                console.log(`⏳ Waiting for buffer (${bufferedAhead.toFixed(2)}s < ${minInitialBuffer}s)...`);
                 // Check again in 500ms
                 setTimeout(() => {
                     if (isLoading) {
                         const newBuffered = audioPlayer.buffered.length > 0 
                             ? audioPlayer.buffered.end(audioPlayer.buffered.length - 1) - audioPlayer.currentTime 
                             : 0;
-                        if (newBuffered >= minBufferForQuickStart || audioPlayer.readyState >= 3) {
+                        if (newBuffered >= minInitialBuffer || (!isYouTubeSource && audioPlayer.readyState >= 3)) {
                             audioPlayer.play().then(() => {
-                                console.log(`✅ Audio play started after buffering (buffer: ${newBuffered.toFixed(2)}s)`);
+                                console.log(`✅ Audio play started after buffering (buffer: ${newBuffered.toFixed(2)}s, min: ${minInitialBuffer}s)`);
                                 isLoading = false;
+                                hasStartedPlayback = true;
                                 reconnectAttempts = 0;
                                 updatePlayPauseButton(true);
-                                cleanupProgressCheck();
+                                cleanupLoad();
                             }).catch(err => {
                                 console.error('❌ Play error after buffering:', err);
                                 isLoading = false;
-                                cleanupProgressCheck();
+                                cleanupLoad();
                             });
                         } else {
-                            // Still not enough buffer, but try anyway if readyState is good
-                            audioPlayer.play().then(() => {
-                                console.log('✅ Audio play started (minimal buffer, readyState >= 3)');
-                                isLoading = false;
-                                updatePlayPauseButton(true);
-                                cleanupProgressCheck();
-                            }).catch(err => {
-                                console.error('❌ Play error:', err);
-                                isLoading = false;
-                                cleanupProgressCheck();
-                            });
+                            // Still not enough buffer: keep waiting (Option A)
+                            console.log(`⏳ Still waiting for buffer (${newBuffered.toFixed(2)}s < ${minInitialBuffer}s)...`);
                         }
                     }
                 }, 500);
@@ -1286,24 +1428,7 @@ function loadStream(youtubeUrl) {
     
     audioPlayer.addEventListener('canplaythrough', () => {
         console.log('✅ Audio can play through');
-        // Ensure we have enough buffer before playing (adaptive)
-        const buffered = audioPlayer.buffered;
-        const bufferedEnd = buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
-        const bufferedAhead = bufferedEnd - audioPlayer.currentTime;
-        
-        if (bufferedAhead < adaptiveBufferTarget && !audioPlayer.paused && !isLoading) {
-            console.log(`⏳ Waiting for more buffer (${bufferedAhead.toFixed(2)}s < ${adaptiveBufferTarget}s target)...`);
-            // Pause briefly to allow more buffering
-            audioPlayer.pause();
-            setTimeout(() => {
-                if (audioPlayer.buffered.length > 0) {
-                    const newBuffered = audioPlayer.buffered.end(audioPlayer.buffered.length - 1) - audioPlayer.currentTime;
-                    if (newBuffered >= adaptiveBufferTarget * 0.7 || audioPlayer.readyState >= 3) {
-                        audioPlayer.play().catch(err => console.error('Play after buffering failed:', err));
-                    }
-                }
-            }, 500);
-        }
+        // Option A: don't force pauses/restarts here; let the browser buffer naturally.
     }, { once: true });
     
     // Re-setup ended listener after loading new stream
@@ -1332,11 +1457,22 @@ function setupEndedListener() {
         console.log('Audio currentTime:', audioPlayer.currentTime);
         console.log('Audio duration:', audioPlayer.duration);
         
-        const isActuallyEnded = audioPlayer.ended && 
-                                !audioPlayer.error && 
-                                audioPlayer.currentTime > 0 &&
-                                (audioPlayer.duration === 0 || 
-                                 Math.abs(audioPlayer.currentTime - audioPlayer.duration) < 2);
+        // Determine "real end" using a reliable duration source.
+        // `audioPlayer.duration` is often 0/NaN for proxied streams (e.g., YouTube via ffmpeg),
+        // which can cause false-ended events and skip tracks.
+        const expectedDuration = currentVideoDuration ? parseInt(currentVideoDuration) : null;
+        const mediaDuration = (audioPlayer.duration && isFinite(audioPlayer.duration) && audioPlayer.duration > 0)
+            ? audioPlayer.duration
+            : expectedDuration;
+
+        const nearEnd = (mediaDuration && isFinite(mediaDuration) && mediaDuration > 0)
+            ? Math.abs(audioPlayer.currentTime - mediaDuration) < 3
+            : false;
+
+        const isActuallyEnded = audioPlayer.ended &&
+                                !audioPlayer.error &&
+                                audioPlayer.currentTime > 1 &&
+                                nearEnd;
         
         if (isActuallyEnded) {
             isHandlingEnded = true;
@@ -1360,7 +1496,9 @@ function setupEndedListener() {
                 return;
             }
             
-            // If autoplay is disabled, just stop
+            // Autoplay toggle removed from UI; keep behavior:
+            // - In favorites/search playlist: advance to next
+            // - Otherwise: stop at end
             if (!autoplayEnabled) {
                 console.log('⏸️ Autoplay disabled, stopping');
                 updatePlayPauseButton(false);
@@ -1501,7 +1639,13 @@ function setupEndedListener() {
                 updatePlayPauseButton(false);
             }
         } else {
-            console.log('⚠️ Song did not actually end, ignoring ended event (likely network issue)');
+            console.log('⚠️ Ignoring ended event (likely network/buffer glitch)', {
+                ended: audioPlayer.ended,
+                error: audioPlayer.error?.code,
+                currentTime: audioPlayer.currentTime,
+                duration: audioPlayer.duration,
+                expectedDuration: expectedDuration
+            });
         }
     };
     
@@ -1912,7 +2056,6 @@ function displayCategoryStations(stations, category) {
                     <div style="color: #ffffff; font-size: 1em; font-weight: 500; margin-bottom: 5px;">${station.name}</div>
                     <div style="color: #b3b3b3; font-size: 0.85em;">${station.country || ''} ${station.genre ? '• ' + station.genre : ''}</div>
                 </div>
-                <div style="color: #00d9ff; font-size: 1.2em;">▶</div>
             </div>
         `;
         
@@ -1971,6 +2114,7 @@ async function playCategoryStation(station) {
         nowPlayingTitle.textContent = station.name;
         updatePageTitle(station.name); // Update page title
         updateVideoThumbnail(null, station); // Show station logo and update favicon
+        refreshPlayerFavoriteButton();
         
         // Load and play the stream
         await loadStream(station.url);
@@ -2009,6 +2153,7 @@ async function playRadioStation(station) {
         nowPlayingTitle.textContent = station.name;
         updatePageTitle(station.name); // Update page title
         updateVideoThumbnail(null, station); // Show station logo and update favicon
+        refreshPlayerFavoriteButton();
         
         // Try to load and play the stream
         try {
@@ -2585,8 +2730,9 @@ function updateTabFaviconFromMedia(stationLogo, videoId) {
     // Fallback to video thumbnail
     const vidId = videoId || currentVideoId;
     if (vidId) {
-        // For YouTube videos, use the video thumbnail as favicon
-        const thumbnailUrl = `https://img.youtube.com/vi/${vidId}/default.jpg`;
+        // For YouTube videos, use the same thumbnail "family" as the player (hqdefault).
+        // updateTabFavicon() will resize to favicon sizes via canvas when possible.
+        const thumbnailUrl = `https://img.youtube.com/vi/${vidId}/hqdefault.jpg`;
         console.log('🎨 Updating favicon to video thumbnail:', thumbnailUrl);
         updateTabFavicon(thumbnailUrl);
         return;
@@ -2665,6 +2811,8 @@ function updateNowPlayingTitle(title) {
     updatePageTitle(title);
     // Update favicon based on current media
     updateTabFaviconFromMedia(null, null);
+    // Keep player heart button in sync
+    refreshPlayerFavoriteButton();
 }
 
 // Highlight the currently playing video in search results
