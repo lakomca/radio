@@ -48,10 +48,84 @@ app.get('/', (req, res) => {
 // Helper function to execute yt-dlp and get URL
 function getAudioUrl(youtubeUrl) {
     return new Promise((resolve, reject) => {
-        // On Windows, try both with and without .exe, and try youtube-dl as fallback
+        // Helper to pick a real audio-only URL from yt-dlp JSON (-J)
+        const pickAudioUrlFromJson = (raw) => {
+            const data = JSON.parse(raw);
+            const formats = Array.isArray(data.formats) ? data.formats : [];
+            const isAudioOnly = (f) => f && f.acodec && f.acodec !== 'none' && (!f.vcodec || f.vcodec === 'none');
+            const isHttp = (u) => typeof u === 'string' && (u.startsWith('http://') || u.startsWith('https://'));
+            const isNonMedia = (u) => /(ytimg\.com|\/storyboard|\/sb\/).*(\.jpg|\.jpeg|\.png|\.webp|\.gif)(\?|$)/i.test(u);
+
+            const audioOnly = formats.filter(isAudioOnly).filter(f => isHttp(f.url) && !isNonMedia(f.url));
+            if (audioOnly.length === 0) {
+                // Fallback: sometimes yt-dlp returns a direct URL at top-level
+                if (isHttp(data.url) && !isNonMedia(data.url)) return data.url;
+                return null;
+            }
+
+            // Prefer m4a/mp4 audio, then webm/opus; prefer higher abr
+            const score = (f) => {
+                const ext = (f.ext || '').toLowerCase();
+                const abr = typeof f.abr === 'number' ? f.abr : 0;
+                const pref =
+                    ext === 'm4a' ? 1000 :
+                    ext === 'mp4' ? 900 :
+                    ext === 'webm' ? 800 :
+                    ext === 'opus' ? 750 : 0;
+                return pref + abr;
+            };
+            audioOnly.sort((a, b) => score(b) - score(a));
+            const picked = audioOnly[0];
+            // Debug: log chosen format details (helps diagnose storyboard/403/expiry issues)
+            console.log('yt-dlp picked audio format:', {
+                id: data.id,
+                title: (data.title || '').slice(0, 80),
+                format_id: picked.format_id,
+                ext: picked.ext,
+                acodec: picked.acodec,
+                abr: picked.abr,
+                protocol: picked.protocol,
+                urlHost: (() => { try { return new URL(picked.url).hostname; } catch { return null; } })()
+            });
+            return picked.url;
+        };
+
+        // On Windows, try both with and without .exe, and try youtube-dl as fallback.
+        // Also support running yt-dlp via Python module (works well on macOS where brew may be blocked).
+        // If you create a local venv at .venv/, we'll prefer that Python too (no global install needed).
+        const localVenvPythonCandidates = [
+            process.env.YTDLP_PYTHON,
+            path.join(__dirname, '.venv', 'bin', 'python3'),
+            path.join(__dirname, '.venv', 'bin', 'python'),
+            path.join(__dirname, '.venv', 'Scripts', 'python.exe'),
+            path.join(__dirname, '.venv', 'Scripts', 'python')
+        ].filter(Boolean);
+
+        const localVenvPythons = localVenvPythonCandidates.filter(p => {
+            try { return fs.existsSync(p); } catch { return false; }
+        });
+
         const commands = [
-            { cmd: 'yt-dlp', args: [youtubeUrl, '-f', 'bestaudio/best', '-g'] },
-            { cmd: 'yt-dlp.exe', args: [youtubeUrl, '-f', 'bestaudio/best', '-g'] },
+            // Local venv python first (most reliable / no system installs)
+            ...localVenvPythons.flatMap(py => ([
+                { cmd: py, args: ['-m', 'yt_dlp', youtubeUrl, '--no-playlist', '-J'], parser: pickAudioUrlFromJson },
+                { cmd: py, args: ['-m', 'yt_dlp', youtubeUrl, '-f', 'bestaudio[ext=m4a]/bestaudio/best', '-g'] }
+            ])),
+
+            // Python module (fallback): python3 -m yt_dlp ...
+            { cmd: 'python3', args: ['-m', 'yt_dlp', youtubeUrl, '--no-playlist', '-J'], parser: pickAudioUrlFromJson },
+            { cmd: 'python', args: ['-m', 'yt_dlp', youtubeUrl, '--no-playlist', '-J'], parser: pickAudioUrlFromJson },
+            // Windows Python launcher
+            { cmd: 'py', args: ['-m', 'yt_dlp', youtubeUrl, '--no-playlist', '-J'], parser: pickAudioUrlFromJson },
+            // Prefer robust JSON selection (avoids non-media URLs like storyboard images)
+            { cmd: 'yt-dlp', args: [youtubeUrl, '--no-playlist', '-J'], parser: pickAudioUrlFromJson },
+            { cmd: 'yt-dlp.exe', args: [youtubeUrl, '--no-playlist', '-J'], parser: pickAudioUrlFromJson },
+            // Fallback: direct URL output (less reliable)
+            { cmd: 'python3', args: ['-m', 'yt_dlp', youtubeUrl, '-f', 'bestaudio[ext=m4a]/bestaudio/best', '-g'] },
+            { cmd: 'python', args: ['-m', 'yt_dlp', youtubeUrl, '-f', 'bestaudio[ext=m4a]/bestaudio/best', '-g'] },
+            { cmd: 'py', args: ['-m', 'yt_dlp', youtubeUrl, '-f', 'bestaudio[ext=m4a]/bestaudio/best', '-g'] },
+            { cmd: 'yt-dlp', args: [youtubeUrl, '-f', 'bestaudio[ext=m4a]/bestaudio/best', '-g'] },
+            { cmd: 'yt-dlp.exe', args: [youtubeUrl, '-f', 'bestaudio[ext=m4a]/bestaudio/best', '-g'] },
             { cmd: 'youtube-dl', args: [youtubeUrl, '-f', 'bestaudio/best', '-g'] },
             { cmd: 'youtube-dl.exe', args: [youtubeUrl, '-f', 'bestaudio/best', '-g'] }
         ];
@@ -65,7 +139,7 @@ function getAudioUrl(youtubeUrl) {
                 return;
             }
 
-            const { cmd, args } = commands[attemptIndex];
+            const { cmd, args, parser } = commands[attemptIndex];
             console.log(`Getting audio URL: Attempting to use ${cmd}`);
             
             let childProcess;
@@ -97,9 +171,30 @@ function getAudioUrl(youtubeUrl) {
 
             childProcess.on('close', (code) => {
                 if (code === 0 && output.trim()) {
-                    const url = output.trim().split('\n')[0];
-                    console.log(`Successfully got audio URL using ${cmd}`);
-                    resolve(url);
+                    try {
+                        let url = null;
+                        if (parser) {
+                            url = parser(output.trim());
+                        } else {
+                            const lines = output.trim().split('\n').map(l => l.trim()).filter(Boolean);
+                            url = lines[0];
+                        }
+
+                        if (!url) throw new Error('No usable audio URL found');
+                        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                            throw new Error('yt-dlp returned invalid URL');
+                        }
+                        if (/(ytimg\.com|\/storyboard|\/sb\/).*(\.jpg|\.jpeg|\.png|\.webp|\.gif)(\?|$)/i.test(url)) {
+                            throw new Error('yt-dlp returned non-media (image/storyboard) URL');
+                        }
+
+                        console.log(`Successfully got audio URL using ${cmd}`);
+                        resolve(url);
+                    } catch (parseErr) {
+                        console.warn(`⚠️ ${cmd} returned output but could not pick audio URL: ${parseErr.message}`);
+                        attemptIndex++;
+                        tryCommand();
+                    }
                 } else {
                     console.log(`${cmd} failed with code ${code}, trying next...`);
                     if (errorOutput) {
@@ -383,7 +478,11 @@ app.get('/stream', (req, res) => {
         res.setHeader('Accept-Ranges', 'bytes');
         res.writeHead(200);
         
+        // YouTube CDN URLs can sometimes return 403 unless a browser-like User-Agent/Referer is provided.
+        // These headers are harmless for most sources and improve compatibility.
         const ffmpegArgs = [
+            '-user_agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            '-headers', 'Referer: https://www.youtube.com/\r\nOrigin: https://www.youtube.com\r\n',
             '-i', url,
             '-f', 'adts',  // AAC container format (better for streaming and interruptions)
             '-acodec', 'aac',
@@ -585,6 +684,82 @@ app.get('/stream', (req, res) => {
                     'Check Railway logs for more details about the error.'
             });
         }
+    });
+});
+
+// Endpoint to proxy/transcode non-YouTube streams (e.g. HLS .m3u8/.ts) to AAC for browser playback.
+// This avoids MEDIA_ERR_SRC_NOT_SUPPORTED when the browser cannot play the source directly.
+app.get('/radio-stream', (req, res) => {
+    const sourceUrl = req.query.url;
+    console.log(`Radio-stream request received for: ${sourceUrl}`);
+
+    if (!sourceUrl) {
+        return res.status(400).json({ error: 'Stream URL is required' });
+    }
+
+    // Set headers for audio streaming
+    res.setHeader('Content-Type', 'audio/aac');
+    res.setHeader('Transfer-Encoding', 'chunked');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.writeHead(200);
+
+    const ffmpegArgs = [
+        '-user_agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        '-headers', 'Referer: https://www.youtube.com/\r\nOrigin: https://www.youtube.com\r\n',
+        '-i', sourceUrl,
+        '-f', 'adts',
+        '-acodec', 'aac',
+        '-b:a', '128k',
+        '-ar', '44100',
+        '-ac', '2',
+        '-reconnect', '1',
+        '-reconnect_at_eof', '1',
+        '-reconnect_streamed', '1',
+        '-reconnect_delay_max', '10',
+        '-reconnect_on_network_error', '1',
+        '-fflags', '+genpts',
+        '-avoid_negative_ts', 'make_zero',
+        '-'
+    ];
+
+    const ffmpeg = spawn('ffmpeg', ffmpegArgs, { shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
+    let clientDisconnected = false;
+
+    ffmpeg.stdout.on('data', (chunk) => {
+        if (!res.destroyed) {
+            try {
+                res.write(chunk);
+            } catch {
+                // client likely disconnected
+            }
+        }
+    });
+
+    ffmpeg.stderr.on('data', (data) => {
+        const msg = data.toString();
+        if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('http error') || msg.toLowerCase().includes('forbidden')) {
+            console.error(`FFmpeg radio-stream error: ${msg.substring(0, 200).trim()}`);
+        }
+    });
+
+    ffmpeg.on('close', (code) => {
+        if (clientDisconnected) {
+            console.log(`FFmpeg radio-stream exited with code ${code} (client disconnected)`);
+            return;
+        }
+        console.log(`FFmpeg radio-stream exited with code ${code}`);
+        if (!res.destroyed) res.end();
+    });
+
+    req.on('close', () => {
+        clientDisconnected = true;
+        try { ffmpeg.kill(); } catch {}
+    });
+    req.on('aborted', () => {
+        clientDisconnected = true;
+        try { ffmpeg.kill(); } catch {}
     });
 });
 

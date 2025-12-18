@@ -26,6 +26,36 @@ const nowPlayingTitle = document.getElementById('nowPlayingTitle');
 const videoThumbnail = document.getElementById('videoThumbnail');
 // Navbar brand removed - always shows PULSE
 
+// ===== DEBUG LOGGING =====
+// Enable by adding ?debug=1 to the URL (or localStorage.DEBUG_STREAMING=1)
+const DEBUG_STREAMING =
+    (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === '1') ||
+    (typeof window !== 'undefined' && window.localStorage && window.localStorage.getItem('DEBUG_STREAMING') === '1');
+
+function dbg(...args) {
+    if (DEBUG_STREAMING) console.log('[DBG]', ...args);
+}
+
+function dbgAudioState(label) {
+    if (!DEBUG_STREAMING) return;
+    try {
+        const buffered = audioPlayer?.buffered;
+        const bufferedEnd = buffered && buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
+        console.log('[DBG]', label, {
+            src: audioPlayer?.src,
+            paused: audioPlayer?.paused,
+            ended: audioPlayer?.ended,
+            readyState: audioPlayer?.readyState,
+            networkState: audioPlayer?.networkState,
+            currentTime: audioPlayer?.currentTime,
+            duration: audioPlayer?.duration,
+            bufferedEnd
+        });
+    } catch (e) {
+        console.log('[DBG]', label, '(failed to read audio state)', e?.message);
+    }
+}
+
 // Authentication elements
 const authModal = document.getElementById('authModal');
 const authButtons = document.getElementById('authButtons');
@@ -50,6 +80,7 @@ let currentUser = null;
 let isLoginMode = true;
 
 let currentStreamUrl = null;
+let currentSourceUrl = null; // Original URL requested (YouTube watch URL or direct station URL)
 let currentVideoUrl = null; // Track current video URL (replaces youtubeUrlInput)
 let currentVideoDuration = null; // Track current video duration from search results
 let currentVideoTitle = null; // Track current video title
@@ -341,6 +372,25 @@ async function loadFavorites() {
         // Build a flattened list so user can "Play Favorites" as a playlist
         const flattenedFavorites = categories.flatMap(cat => (favoritesByCategory[cat] || []).map(f => ({ ...f, _category: cat })));
 
+        const buildFavoritesPlaylist = () => flattenedFavorites.map(f => ({
+            title: f.item_name,
+            url: f.item_url,
+            duration: f.metadata?.duration || null,
+            id: f.metadata?.id || null,
+            type: f.item_type,
+            category: f._category,
+            logo_url: f.logo_url || null,
+            item_id: f.item_id
+        }));
+
+        const startFavoritesModeAt = async (fav) => {
+            playbackMode = 'favorites';
+            playlist = buildFavoritesPlaylist();
+            const idx = playlist.findIndex(p => p.type === fav.item_type && p.item_id === fav.item_id);
+            currentIndex = idx >= 0 ? idx : 0;
+            updateNavigationButtons();
+        };
+
         // Add a top toolbar for favorites playback
         const favoritesToolbar = document.createElement('div');
         favoritesToolbar.style.cssText = 'display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 18px;';
@@ -359,16 +409,7 @@ async function loadFavorites() {
             playbackMode = 'favorites';
 
             // Convert favorites into playlist items compatible with next/prev flow
-            playlist = flattenedFavorites.map(f => ({
-                title: f.item_name,
-                url: f.item_url,
-                duration: f.metadata?.duration || null,
-                id: f.metadata?.id || null,
-                type: f.item_type,
-                category: f._category,
-                logo_url: f.logo_url || null,
-                item_id: f.item_id
-            }));
+            playlist = buildFavoritesPlaylist();
 
             currentIndex = 0;
             const first = playlist[0];
@@ -488,7 +529,8 @@ async function loadFavorites() {
                         }
                     });
                     
-                    stationCard.addEventListener('click', () => {
+                    stationCard.addEventListener('click', async () => {
+                        await startFavoritesModeAt(fav);
                         // Parse metadata to reconstruct station object
                         const station = {
                             name: fav.item_name,
@@ -566,7 +608,8 @@ async function loadFavorites() {
                         }
                     });
                     
-                    videoCard.addEventListener('click', () => {
+                    videoCard.addEventListener('click', async () => {
+                        await startFavoritesModeAt(fav);
                         currentVideoId = videoId;
                         currentVideoUrl = fav.item_url;
                         currentVideoTitle = fav.item_name;
@@ -624,6 +667,8 @@ async function reconnectStream() {
     
     reconnectAttempts++;
     console.log(`🔄 Reconnection attempt ${reconnectAttempts}/${maxReconnectAttempts}`);
+    dbg('reconnectStream', { reconnectAttempts, currentSourceUrl, currentStreamUrl, isLoading });
+    dbgAudioState('before reconnect');
     
     // Increase buffer target for reconnection
     adaptiveBufferTarget = Math.min(adaptiveBufferTarget + 5, 30); // Max 30 seconds buffer
@@ -636,12 +681,19 @@ async function reconnectStream() {
     
     await new Promise(resolve => setTimeout(resolve, delay));
     
-    // Reload the stream if we have a current stream URL
-    if (currentStreamUrl) {
-        console.log('🔄 Reconnecting to stream:', currentStreamUrl);
-        const url = currentStreamUrl.replace('/stream?url=', '').replace(/\&retry=true/g, '');
-        const decodedUrl = decodeURIComponent(url);
-        loadStream(decodedUrl);
+    // Reload the stream if we have a current source URL
+    if (currentSourceUrl) {
+        console.log('🔄 Reconnecting to stream:', currentSourceUrl);
+        // If we're stuck in a loading state (readyState 0, no buffer), loadStream() will ignore duplicates.
+        // Force a restart by clearing the loading flag and resetting the media element.
+        isLoading = false;
+        try {
+            audioPlayer.pause();
+            audioPlayer.removeAttribute('src');
+            audioPlayer.load();
+        } catch {}
+        // Small delay to let the media element reset before reloading
+        setTimeout(() => loadStream(currentSourceUrl), 50);
     }
 }
 let displayedVideosCount = 0; // Track how many videos are currently displayed
@@ -737,6 +789,7 @@ audioPlayer.addEventListener('progress', () => {
 // Handle stalled events - with automatic retry and increased buffering
 audioPlayer.addEventListener('stalled', () => {
     console.log('⚠️ Stream stalled - waiting for data');
+    dbgAudioState('stalled');
     const buffered = audioPlayer.buffered;
     const bufferedTime = buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
     console.log(`  Current readyState: ${audioPlayer.readyState}, buffered: ${bufferedTime.toFixed(2)}s`);
@@ -768,6 +821,7 @@ audioPlayer.addEventListener('stalled', () => {
 // Handle waiting events
 audioPlayer.addEventListener('waiting', () => {
     console.log('⏳ Stream waiting for data');
+    dbgAudioState('waiting');
     // Don't reload or restart - let browser handle buffering naturally
 });
 
@@ -777,6 +831,7 @@ audioPlayer.addEventListener('waiting', () => {
 // Handle suspend events
 audioPlayer.addEventListener('suspend', () => {
     console.log('⏸️ Stream suspended (normal - enough data buffered)');
+    dbgAudioState('suspend');
 });
 
 // Track when source changes
@@ -1136,19 +1191,51 @@ function loadStream(youtubeUrl) {
     
     console.log('🎵 ===== LOADING NEW STREAM =====');
     console.log('URL:', youtubeUrl);
+    dbg('loadStream called', {
+        youtubeUrl,
+        currentVideoUrl,
+        currentVideoId,
+        currentStation: currentStation?.name,
+        playbackMode,
+        playlistLen: playlist?.length,
+        currentIndex,
+        activeCategory,
+        currentGenre,
+        isLoading
+    });
+    dbgAudioState('before loadStream');
     console.trace('loadStream called from:');
     
     isLoading = true;
     
     playPauseBtn.disabled = true;
     
+    // Defensive: sometimes a bad URL (like a ytimg storyboard/thumbnail) can slip in.
+    // If we have a videoId, convert it back to a proper watch URL.
+    if (typeof youtubeUrl === 'string') {
+        const looksLikeImage = /(?:ytimg\.com|img\.youtube\.com)/i.test(youtubeUrl) || /\.(png|jpe?g|webp|gif)(\?|$)/i.test(youtubeUrl);
+        if (looksLikeImage && currentVideoId) {
+            console.warn('⚠️ Received image URL for playback; converting to watch URL using currentVideoId:', youtubeUrl);
+            youtubeUrl = `https://www.youtube.com/watch?v=${currentVideoId}`;
+        }
+    }
+
+    // Store original requested URL for reconnection logic
+    currentSourceUrl = youtubeUrl;
+
     const isYouTubeSource = /(?:youtube\.com|youtu\.be)/i.test(youtubeUrl || '');
+    const looksLikeHlsOrTs = /(\.m3u8(\?|$))|(\.ts(\?|$))/i.test(youtubeUrl || '');
     
     // Create stream URL
+    // Route playback:
+    // - YouTube -> backend /stream
+    // - HLS (.m3u8/.ts) or other non-YouTube streams that browsers can't play -> backend /radio-stream transcoder
+    // - Simple direct radio URLs (mp3/aac) -> direct
     const streamUrl = isYouTubeSource
         ? `/stream?url=${encodeURIComponent(youtubeUrl)}`
-        : youtubeUrl;
+        : (looksLikeHlsOrTs ? `/radio-stream?url=${encodeURIComponent(youtubeUrl)}` : youtubeUrl);
     console.log('Stream URL:', streamUrl, `(direct=${!isYouTubeSource})`);
+    dbg('route decision', { isYouTubeSource, looksLikeHlsOrTs, streamUrl, currentSourceUrl });
     
     // Check if we're reloading the same stream
     if (currentStreamUrl === streamUrl && !audioPlayer.paused) {
@@ -1163,7 +1250,8 @@ function loadStream(youtubeUrl) {
     try {
         const wasPlaying = !audioPlayer.paused;
         const oldTime = audioPlayer.currentTime;
-        console.log('Resetting audio player. Was playing:', wasPlaying, 'Time:', oldTime);
+    console.log('Resetting audio player. Was playing:', wasPlaying, 'Time:', oldTime);
+    dbgAudioState('after reset (before src set)');
         
         audioPlayer.pause();
         audioPlayer.removeAttribute('src');
@@ -1192,6 +1280,7 @@ function loadStream(youtubeUrl) {
         audioPlayer.src = streamUrl;
         audioPlayer.preload = 'auto';
         audioPlayer.load();
+        dbgAudioState('after src set + load()');
     }, 100);
     
     // Track progress to detect if data is actually being received
