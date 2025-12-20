@@ -426,12 +426,366 @@ function searchYouTube(query) {
 // Store active streams
 const activeStreams = new Map();
 
+// Stream queue system to prevent skipping
+const streamQueue = [];
+let isProcessingQueue = false;
+const STREAM_TIMEOUT = 30 * 60 * 1000; // 30 minutes in milliseconds
+
 // CORS middleware
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-Origin, Content-Type, Accept');
     next();
 });
+
+// Process stream queue
+async function processStreamQueue() {
+    if (isProcessingQueue || streamQueue.length === 0) {
+        return;
+    }
+    
+    isProcessingQueue = true;
+    
+    while (streamQueue.length > 0) {
+        const { req, res, youtubeUrl } = streamQueue.shift();
+        
+        // Check if client is still connected
+        if (res.destroyed || res.headersSent) {
+            console.log('Skipping queue item - client disconnected or already responded');
+            continue;
+        }
+        
+        try {
+            await processStreamRequest(req, res, youtubeUrl);
+        } catch (error) {
+            console.error('Error processing stream from queue:', error);
+            if (!res.headersSent) {
+                res.status(500).json({ 
+                    error: 'Stream processing failed', 
+                    details: error.message 
+                });
+            }
+        }
+        
+        // Small delay between queue items to prevent overwhelming the system
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    isProcessingQueue = false;
+}
+
+// Process a single stream request
+async function processStreamRequest(req, res, youtubeUrl) {
+    return new Promise((resolve, reject) => {
+        // Get audio URL from YouTube using yt-dlp first
+        getAudioUrl(youtubeUrl).then(audioUrl => {
+            if (!audioUrl || !audioUrl.trim()) {
+                console.error('Failed to get audio URL - empty response');
+                if (!res.headersSent) {
+                    res.status(500).json({ 
+                        error: 'Failed to get audio URL', 
+                        details: 'yt-dlp returned empty response. Please check Railway logs for more details.',
+                        hint: 'Make sure yt-dlp is installed and accessible in PATH'
+                    });
+                }
+                reject(new Error('Empty audio URL'));
+                return;
+            }
+
+            // Validate the URL
+            const url = audioUrl.trim();
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                console.error('Invalid audio URL format:', url);
+                if (!res.headersSent) {
+                    res.status(500).json({ 
+                        error: 'Invalid audio URL', 
+                        details: 'yt-dlp returned an invalid URL format',
+                        hint: 'The video might be unavailable or restricted'
+                    });
+                }
+                reject(new Error('Invalid URL format'));
+                return;
+            }
+
+            console.log(`Starting ffmpeg stream for: ${youtubeUrl}`);
+            console.log(`Audio URL: ${url.substring(0, 100)}...`);
+            
+            // Set headers for audio streaming - send immediately with progressive streaming
+            res.setHeader('Content-Type', 'audio/aac');
+            res.setHeader('Transfer-Encoding', 'chunked');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('Connection', 'keep-alive');
+            res.setHeader('Accept-Ranges', 'bytes');
+            res.setHeader('X-Accel-Buffering', 'no'); // Disable buffering for progressive streaming
+            res.writeHead(200);
+            
+            // YouTube CDN URLs can sometimes return 403 unless a browser-like User-Agent/Referer is provided.
+            // These headers are harmless for most sources and improve compatibility.
+            const ffmpegArgs = [
+                '-user_agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                '-headers', 'Referer: https://www.youtube.com/\r\nOrigin: https://www.youtube.com\r\n',
+                '-i', url,
+                '-f', 'adts',  // AAC container format (better for streaming and interruptions)
+                '-acodec', 'aac',
+                '-b:a', '128k',  // Audio bitrate
+                '-ar', '44100',  // Sample rate
+                '-ac', '2',  // Stereo
+                '-reconnect', '1',
+                '-reconnect_at_eof', '1',
+                '-reconnect_streamed', '1',
+                '-reconnect_delay_max', '30',  // Increased to 30 seconds for better reconnection
+                '-reconnect_on_network_error', '1',
+                '-timeout', '1800000000',  // 30 minutes timeout in microseconds (30 * 60 * 1000 * 1000)
+                '-rw_timeout', '1800000000',  // 30 minutes read/write timeout
+                '-fflags', '+genpts+flush_packets',  // Generate PTS and flush packets for progressive streaming
+                '-avoid_negative_ts', 'make_zero',  // Prevent timestamp issues
+                '-flush_packets', '1',  // Flush packets immediately for progressive streaming
+                '-'
+            ];
+            
+            console.log(`FFmpeg command: ffmpeg ${ffmpegArgs.join(' ')}`);
+            const ffmpeg = spawn('ffmpeg', ffmpegArgs, { 
+                shell: false,
+                stdio: ['ignore', 'pipe', 'pipe']
+            });
+
+            // Set timeout for FFmpeg process (30 minutes)
+            const processTimeout = setTimeout(() => {
+                console.log('FFmpeg process timeout (30 minutes) - killing process');
+                try {
+                    ffmpeg.kill();
+                } catch (err) {
+                    console.error('Error killing ffmpeg on timeout:', err);
+                }
+                if (!res.headersSent) {
+                    res.status(500).json({ 
+                        error: 'Stream timeout', 
+                        details: 'Stream processing exceeded 30 minute timeout'
+                    });
+                } else {
+                    res.end();
+                }
+                reject(new Error('Process timeout'));
+            }, STREAM_TIMEOUT);
+
+            let firstChunk = true;
+            let hasError = false;
+            let bytesWritten = 0;
+            const CHUNK_SIZE = 64 * 1024; // 64KB chunks for progressive streaming
+
+            // Handle ffmpeg errors
+            ffmpeg.stderr.on('data', (data) => {
+                const msg = data.toString();
+                // Log initial connection info
+                if (msg.includes('Stream #0') || msg.includes('Audio:') || msg.includes('Duration:')) {
+                    console.log(`FFmpeg info: ${msg.substring(0, 150).trim()}`);
+                }
+                // Check for HTTP errors (404, 403, etc.)
+                if (msg.includes('404') || msg.includes('Not Found')) {
+                    if (!hasError) {
+                        console.error(`FFmpeg error: 404 Not Found - URL may have expired or video is unavailable`);
+                        if (!msg.includes('storyboard') && !msg.includes('i.ytimg.com')) {
+                            console.error(`Full error: ${msg.substring(0, 200)}`);
+                        }
+                    }
+                    hasError = true;
+                    clearTimeout(processTimeout);
+                    if (!res.headersSent) {
+                        res.status(500).json({ 
+                            error: 'Stream URL expired or video unavailable', 
+                            details: 'The YouTube stream URL is no longer valid (404). This usually means the URL expired or the video is unavailable.',
+                            hint: 'Try refreshing the page or searching for the video again'
+                        });
+                    } else {
+                        res.end();
+                    }
+                    reject(new Error('404 Not Found'));
+                } else if (msg.includes('403') || msg.includes('Forbidden')) {
+                    console.error(`FFmpeg error: 403 Forbidden - Video may be restricted`);
+                    console.error(`Full error: ${msg}`);
+                    hasError = true;
+                    clearTimeout(processTimeout);
+                    if (!res.headersSent) {
+                        res.status(500).json({ 
+                            error: 'Video access forbidden', 
+                            details: 'The video may be restricted, private, or unavailable in your region.',
+                            hint: 'Try a different video'
+                        });
+                    } else {
+                        res.end();
+                    }
+                    reject(new Error('403 Forbidden'));
+                } else if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('failed') || msg.toLowerCase().includes('http error')) {
+                    console.error(`FFmpeg error: ${msg}`);
+                    hasError = true;
+                    clearTimeout(processTimeout);
+                    if (!res.headersSent) {
+                        res.status(500).json({ 
+                            error: 'FFmpeg streaming error', 
+                            details: msg.substring(0, 200),
+                            hint: 'Check server logs for more details'
+                        });
+                    } else {
+                        res.end();
+                    }
+                    reject(new Error('FFmpeg error'));
+                }
+            });
+
+            ffmpeg.on('error', (error) => {
+                console.error('FFmpeg spawn error:', error);
+                hasError = true;
+                clearTimeout(processTimeout);
+                if (!res.headersSent) {
+                    res.status(500).json({ error: 'FFmpeg not found. Please install ffmpeg and add it to PATH.' });
+                } else {
+                    res.end();
+                }
+                reject(error);
+            });
+
+            // Pipe ffmpeg output to response with chunked progressive streaming
+            ffmpeg.stdout.on('data', (chunk) => {
+                if (firstChunk) {
+                    console.log(`FFmpeg started streaming, first chunk size: ${chunk.length} bytes`);
+                    firstChunk = false;
+                }
+                
+                if (!hasError && !res.destroyed) {
+                    try {
+                        // Write chunks progressively
+                        bytesWritten += chunk.length;
+                        
+                        // Process in smaller chunks for better progressive streaming
+                        let offset = 0;
+                        while (offset < chunk.length) {
+                            const chunkToWrite = chunk.slice(offset, offset + CHUNK_SIZE);
+                            if (chunkToWrite.length > 0) {
+                                res.write(chunkToWrite);
+                                offset += CHUNK_SIZE;
+                            } else {
+                                break;
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Error writing chunk:', err);
+                        // If write fails, it might be because client disconnected
+                        // Don't kill ffmpeg, let it continue in case client reconnects
+                    }
+                }
+            });
+
+            // Handle stream end
+            ffmpeg.on('close', (code) => {
+                clearTimeout(processTimeout);
+                
+                // If the client disconnected (common when switching tracks), ffmpeg will be killed and may exit non-zero.
+                if (clientDisconnected) {
+                    console.log(`FFmpeg exited with code ${code} (client disconnected)`);
+                    resolve();
+                    return;
+                }
+                
+                console.log(`FFmpeg process exited with code ${code}, bytes written: ${bytesWritten}`);
+                
+                // Code 0 is normal exit, code 1 might be error but could also be end of stream
+                // Code 8 typically means input file error (like 404)
+                if (code === 8) {
+                    console.error(`FFmpeg exited with code 8 - Input file error (likely 404 or invalid URL)`);
+                    if (!res.headersSent && !hasError) {
+                        res.status(500).json({ 
+                            error: 'Stream URL expired or invalid', 
+                            details: 'FFmpeg could not access the stream URL (error code 8). The URL may have expired or the video is unavailable.',
+                            hint: 'YouTube URLs expire quickly. Try refreshing or searching again.',
+                            code: code
+                        });
+                    }
+                    reject(new Error(`FFmpeg exit code ${code}`));
+                    return;
+                } else if (code !== 0 && code !== 1) {
+                    console.error(`FFmpeg exited with error code: ${code}`);
+                    if (!res.headersSent && !hasError) {
+                        res.status(500).json({ 
+                            error: 'FFmpeg process failed', 
+                            details: `FFmpeg exited with code ${code}`,
+                            hint: 'Check server logs for FFmpeg error details',
+                            code: code
+                        });
+                    }
+                    reject(new Error(`FFmpeg exit code ${code}`));
+                    return;
+                }
+                
+                if (!res.headersSent && !hasError) {
+                    res.status(500).json({ 
+                        error: 'Stream failed to start', 
+                        details: 'FFmpeg process ended before streaming started',
+                        hint: 'The video URL may be invalid or expired. Try refreshing.',
+                        code: code
+                    });
+                    reject(new Error('Stream failed to start'));
+                } else {
+                    // Only end if headers were sent (stream was started)
+                    // This allows the stream to end naturally when video finishes
+                    res.end();
+                    resolve();
+                }
+            });
+
+            // Handle client disconnect
+            let clientDisconnected = false;
+            req.on('close', () => {
+                clientDisconnected = true;
+                clearTimeout(processTimeout);
+                console.log('Client disconnected - stopping ffmpeg');
+                try {
+                    ffmpeg.kill();
+                } catch (err) {
+                    console.error('Error killing ffmpeg:', err);
+                }
+                resolve();
+            });
+            
+            // Also handle abort
+            req.on('aborted', () => {
+                clientDisconnected = true;
+                clearTimeout(processTimeout);
+                console.log('Client aborted connection');
+                try {
+                    ffmpeg.kill();
+                } catch (err) {
+                    console.error('Error killing ffmpeg on abort:', err);
+                }
+                resolve();
+            });
+
+            // Store stream reference
+            const streamId = Date.now().toString();
+            activeStreams.set(streamId, { ffmpeg, res, timeout: processTimeout });
+            
+            // Clean up stream reference when done
+            const cleanup = () => {
+                activeStreams.delete(streamId);
+            };
+            req.on('close', cleanup);
+            req.on('aborted', cleanup);
+            ffmpeg.on('close', cleanup);
+        }).catch(error => {
+            console.error('Error getting audio URL:', error);
+            console.error('Error stack:', error.stack);
+            if (!res.headersSent) {
+                res.status(500).json({ 
+                    error: 'Failed to process YouTube URL', 
+                    details: error.message,
+                    hint: error.message.includes('not found') ? 
+                        'yt-dlp or youtube-dl is not installed. Check Railway deployment logs.' : 
+                        'Check Railway logs for more details about the error.'
+                });
+            }
+            reject(error);
+        });
+    });
+}
 
 // Endpoint to start streaming a YouTube URL
 app.get('/stream', (req, res) => {
@@ -445,246 +799,12 @@ app.get('/stream', (req, res) => {
         return res.status(400).json({ error: 'YouTube URL is required' });
     }
 
-    // Get audio URL from YouTube using yt-dlp first
-    getAudioUrl(youtubeUrl).then(audioUrl => {
-        if (!audioUrl || !audioUrl.trim()) {
-            console.error('Failed to get audio URL - empty response');
-            return res.status(500).json({ 
-                error: 'Failed to get audio URL', 
-                details: 'yt-dlp returned empty response. Please check Railway logs for more details.',
-                hint: 'Make sure yt-dlp is installed and accessible in PATH'
-            });
-        }
-
-        // Validate the URL
-        const url = audioUrl.trim();
-        if (!url.startsWith('http://') && !url.startsWith('https://')) {
-            console.error('Invalid audio URL format:', url);
-            return res.status(500).json({ 
-                error: 'Invalid audio URL', 
-                details: 'yt-dlp returned an invalid URL format',
-                hint: 'The video might be unavailable or restricted'
-            });
-        }
-
-        console.log(`Starting ffmpeg stream for: ${youtubeUrl}`);
-        console.log(`Audio URL: ${url.substring(0, 100)}...`);
-        
-        // Set headers for audio streaming - send immediately
-        res.setHeader('Content-Type', 'audio/aac');  // Changed from audio/mpeg for AAC format
-        res.setHeader('Transfer-Encoding', 'chunked');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-        res.setHeader('Accept-Ranges', 'bytes');
-        res.writeHead(200);
-        
-        // YouTube CDN URLs can sometimes return 403 unless a browser-like User-Agent/Referer is provided.
-        // These headers are harmless for most sources and improve compatibility.
-        const ffmpegArgs = [
-            '-user_agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            '-headers', 'Referer: https://www.youtube.com/\r\nOrigin: https://www.youtube.com\r\n',
-            '-i', url,
-            '-f', 'adts',  // AAC container format (better for streaming and interruptions)
-            '-acodec', 'aac',
-            '-b:a', '128k',  // Audio bitrate
-            '-ar', '44100',  // Sample rate
-            '-ac', '2',  // Stereo
-            '-reconnect', '1',
-            '-reconnect_at_eof', '1',
-            '-reconnect_streamed', '1',
-            '-reconnect_delay_max', '10',  // Increased delay for better reconnection
-            '-reconnect_on_network_error', '1',
-            '-fflags', '+genpts',  // Generate presentation timestamps
-            '-avoid_negative_ts', 'make_zero',  // Prevent timestamp issues
-            '-'
-        ];
-        
-        console.log(`FFmpeg command: ffmpeg ${ffmpegArgs.join(' ')}`);
-        const ffmpeg = spawn('ffmpeg', ffmpegArgs, { 
-            shell: false,
-            stdio: ['ignore', 'pipe', 'pipe']
-        });
-
-        let firstChunk = true;
-        let hasError = false;
-
-        // Handle ffmpeg errors
-        ffmpeg.stderr.on('data', (data) => {
-            const msg = data.toString();
-            // Log initial connection info
-            if (msg.includes('Stream #0') || msg.includes('Audio:') || msg.includes('Duration:')) {
-                console.log(`FFmpeg info: ${msg.substring(0, 150).trim()}`);
-            }
-            // Check for HTTP errors (404, 403, etc.)
-            if (msg.includes('404') || msg.includes('Not Found')) {
-                // Only log once per stream to avoid spam
-                if (!hasError) {
-                    console.error(`FFmpeg error: 404 Not Found - URL may have expired or video is unavailable`);
-                    // Only log full error if it's not a storyboard/image URL (those are common and not critical)
-                    if (!msg.includes('storyboard') && !msg.includes('i.ytimg.com')) {
-                        console.error(`Full error: ${msg.substring(0, 200)}`);
-                    }
-                }
-                hasError = true;
-                // Try to get a fresh URL and retry (optional - you can enable this)
-                // For now, just report the error clearly
-                if (!res.headersSent) {
-                    res.status(500).json({ 
-                        error: 'Stream URL expired or video unavailable', 
-                        details: 'The YouTube stream URL is no longer valid (404). This usually means the URL expired or the video is unavailable.',
-                        hint: 'Try refreshing the page or searching for the video again'
-                    });
-                } else {
-                    res.end();
-                }
-            } else if (msg.includes('403') || msg.includes('Forbidden')) {
-                console.error(`FFmpeg error: 403 Forbidden - Video may be restricted`);
-                console.error(`Full error: ${msg}`);
-                hasError = true;
-                if (!res.headersSent) {
-                    res.status(500).json({ 
-                        error: 'Video access forbidden', 
-                        details: 'The video may be restricted, private, or unavailable in your region.',
-                        hint: 'Try a different video'
-                    });
-                } else {
-                    res.end();
-                }
-            } else if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('failed') || msg.toLowerCase().includes('http error')) {
-                console.error(`FFmpeg error: ${msg}`);
-                hasError = true;
-                if (!res.headersSent) {
-                    res.status(500).json({ 
-                        error: 'FFmpeg streaming error', 
-                        details: msg.substring(0, 200),
-                        hint: 'Check server logs for more details'
-                    });
-                } else {
-                    res.end();
-                }
-            }
-        });
-
-        ffmpeg.on('error', (error) => {
-            console.error('FFmpeg spawn error:', error);
-            hasError = true;
-            if (!res.headersSent) {
-                res.status(500).json({ error: 'FFmpeg not found. Please install ffmpeg and add it to PATH.' });
-            } else {
-                res.end();
-            }
-        });
-
-        // Pipe ffmpeg output to response
-        let bytesWritten = 0;
-        ffmpeg.stdout.on('data', (chunk) => {
-            if (firstChunk) {
-                console.log(`FFmpeg started streaming, first chunk size: ${chunk.length} bytes`);
-                firstChunk = false;
-            }
-            if (!hasError && !res.destroyed) {
-                try {
-                    res.write(chunk);
-                    bytesWritten += chunk.length;
-                } catch (err) {
-                    console.error('Error writing chunk:', err);
-                    // If write fails, it might be because client disconnected
-                    // Don't kill ffmpeg, let it continue in case client reconnects
-                }
-            }
-        });
-
-        // Handle stream end
-        ffmpeg.on('close', (code) => {
-            // If the client disconnected (common when switching tracks), ffmpeg will be killed and may exit non-zero.
-            // Treat that as normal to avoid confusing "404/invalid URL" logs.
-            if (clientDisconnected) {
-                console.log(`FFmpeg exited with code ${code} (client disconnected)`);
-                return;
-            }
-            
-            console.log(`FFmpeg process exited with code ${code}`);
-            // Code 0 is normal exit, code 1 might be error but could also be end of stream
-            // Code 8 typically means input file error (like 404)
-            if (code === 8) {
-                console.error(`FFmpeg exited with code 8 - Input file error (likely 404 or invalid URL)`);
-                if (!res.headersSent && !hasError) {
-                    res.status(500).json({ 
-                        error: 'Stream URL expired or invalid', 
-                        details: 'FFmpeg could not access the stream URL (error code 8). The URL may have expired or the video is unavailable.',
-                        hint: 'YouTube URLs expire quickly. Try refreshing or searching again.',
-                        code: code
-                    });
-                    return;
-                }
-            } else if (code !== 0 && code !== 1) {
-                console.error(`FFmpeg exited with error code: ${code}`);
-                if (!res.headersSent && !hasError) {
-                    res.status(500).json({ 
-                        error: 'FFmpeg process failed', 
-                        details: `FFmpeg exited with code ${code}`,
-                        hint: 'Check server logs for FFmpeg error details',
-                        code: code
-                    });
-                    return;
-                }
-            }
-            if (!res.headersSent && !hasError) {
-                res.status(500).json({ 
-                    error: 'Stream failed to start', 
-                    details: 'FFmpeg process ended before streaming started',
-                    hint: 'The video URL may be invalid or expired. Try refreshing.',
-                    code: code
-                });
-            } else {
-                // Only end if headers were sent (stream was started)
-                // This allows the stream to end naturally when video finishes
-                res.end();
-            }
-        });
-
-        // Handle client disconnect
-        let clientDisconnected = false;
-        req.on('close', () => {
-            clientDisconnected = true;
-            console.log('Client disconnected - stopping ffmpeg');
-            // Only kill ffmpeg if client actually disconnected
-            // This prevents killing the stream during normal buffering
-            try {
-                ffmpeg.kill();
-            } catch (err) {
-                console.error('Error killing ffmpeg:', err);
-            }
-        });
-        
-        // Also handle abort
-        req.on('aborted', () => {
-            clientDisconnected = true;
-            console.log('Client aborted connection');
-            try {
-                ffmpeg.kill();
-            } catch (err) {
-                console.error('Error killing ffmpeg on abort:', err);
-            }
-        });
-
-        // Store stream reference
-        const streamId = Date.now().toString();
-        activeStreams.set(streamId, { ffmpeg, res });
-        
-    }).catch(error => {
-        console.error('Error getting audio URL:', error);
-        console.error('Error stack:', error.stack);
-        if (!res.headersSent) {
-            res.status(500).json({ 
-                error: 'Failed to process YouTube URL', 
-                details: error.message,
-                hint: error.message.includes('not found') ? 
-                    'yt-dlp or youtube-dl is not installed. Check Railway deployment logs.' : 
-                    'Check Railway logs for more details about the error.'
-            });
-        }
-    });
+    // Add to queue
+    streamQueue.push({ req, res, youtubeUrl });
+    console.log(`Stream request queued. Queue length: ${streamQueue.length}`);
+    
+    // Process queue
+    processStreamQueue();
 });
 
 // Endpoint to proxy/transcode non-YouTube streams (e.g. HLS .m3u8/.ts) to AAC for browser playback.
@@ -697,12 +817,13 @@ app.get('/radio-stream', (req, res) => {
         return res.status(400).json({ error: 'Stream URL is required' });
     }
 
-    // Set headers for audio streaming
+    // Set headers for audio streaming with progressive streaming
     res.setHeader('Content-Type', 'audio/aac');
     res.setHeader('Transfer-Encoding', 'chunked');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable buffering for progressive streaming
     res.writeHead(200);
 
     const ffmpegArgs = [
@@ -717,20 +838,46 @@ app.get('/radio-stream', (req, res) => {
         '-reconnect', '1',
         '-reconnect_at_eof', '1',
         '-reconnect_streamed', '1',
-        '-reconnect_delay_max', '10',
+        '-reconnect_delay_max', '30',  // Increased to 30 seconds
         '-reconnect_on_network_error', '1',
-        '-fflags', '+genpts',
+        '-timeout', '1800000000',  // 30 minutes timeout in microseconds
+        '-rw_timeout', '1800000000',  // 30 minutes read/write timeout
+        '-fflags', '+genpts+flush_packets',  // Generate PTS and flush packets for progressive streaming
         '-avoid_negative_ts', 'make_zero',
+        '-flush_packets', '1',  // Flush packets immediately
         '-'
     ];
 
     const ffmpeg = spawn('ffmpeg', ffmpegArgs, { shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
     let clientDisconnected = false;
+    
+    // Set timeout for radio stream (30 minutes)
+    const processTimeout = setTimeout(() => {
+        console.log('Radio stream timeout (30 minutes) - killing process');
+        try {
+            ffmpeg.kill();
+        } catch (err) {
+            console.error('Error killing ffmpeg on timeout:', err);
+        }
+        if (!res.destroyed) res.end();
+    }, STREAM_TIMEOUT);
+
+    const CHUNK_SIZE = 64 * 1024; // 64KB chunks for progressive streaming
 
     ffmpeg.stdout.on('data', (chunk) => {
         if (!res.destroyed) {
             try {
-                res.write(chunk);
+                // Process in smaller chunks for better progressive streaming
+                let offset = 0;
+                while (offset < chunk.length) {
+                    const chunkToWrite = chunk.slice(offset, offset + CHUNK_SIZE);
+                    if (chunkToWrite.length > 0) {
+                        res.write(chunkToWrite);
+                        offset += CHUNK_SIZE;
+                    } else {
+                        break;
+                    }
+                }
             } catch {
                 // client likely disconnected
             }
@@ -745,6 +892,7 @@ app.get('/radio-stream', (req, res) => {
     });
 
     ffmpeg.on('close', (code) => {
+        clearTimeout(processTimeout);
         if (clientDisconnected) {
             console.log(`FFmpeg radio-stream exited with code ${code} (client disconnected)`);
             return;
@@ -755,10 +903,12 @@ app.get('/radio-stream', (req, res) => {
 
     req.on('close', () => {
         clientDisconnected = true;
+        clearTimeout(processTimeout);
         try { ffmpeg.kill(); } catch {}
     });
     req.on('aborted', () => {
         clientDisconnected = true;
+        clearTimeout(processTimeout);
         try { ffmpeg.kill(); } catch {}
     });
 });

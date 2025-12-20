@@ -64,6 +64,8 @@ const loginBtn = document.getElementById('loginBtn');
 const signupBtn = document.getElementById('signupBtn');
 const logoutBtn = document.getElementById('logoutBtn');
 const usernameDisplay = document.getElementById('usernameDisplay');
+const hamburgerBtn = document.getElementById('hamburgerBtn');
+const menuDropdown = document.getElementById('menuDropdown');
 const authFormElement = document.getElementById('authFormElement');
 const authTitle = document.getElementById('authTitle');
 const authSubmitBtn = document.getElementById('authSubmitBtn');
@@ -134,10 +136,10 @@ async function checkAuthStatus() {
 function updateAuthUI() {
     if (currentUser) {
         authButtons.style.display = 'none';
-        userProfile.style.display = 'flex';
+        userProfile.style.display = 'block';
         usernameDisplay.textContent = currentUser.username;
     } else {
-        authButtons.style.display = 'flex';
+        authButtons.style.display = 'block';
         userProfile.style.display = 'none';
     }
     // Keep player favorite button state in sync with auth state
@@ -1746,9 +1748,13 @@ function updatePlayPauseButton(isPlaying) {
     if (isPlaying) {
         playIcon.style.display = 'none';
         pauseIcon.style.display = 'block';
+        playPauseBtn.classList.add('playing');
+        playPauseBtn.classList.remove('paused');
     } else {
         playIcon.style.display = 'block';
         pauseIcon.style.display = 'none';
+        playPauseBtn.classList.add('paused');
+        playPauseBtn.classList.remove('playing');
     }
 }
 
@@ -3099,6 +3105,48 @@ audioPlayer.addEventListener('pause', () => {
 
 // Set up ended listener initially
 setupEndedListener();
+
+// Initialize play/pause button state
+updatePlayPauseButton(false);
+
+// ===== HAMBURGER MENU =====
+
+// Toggle hamburger menu
+if (hamburgerBtn && menuDropdown) {
+    hamburgerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        hamburgerBtn.classList.toggle('active');
+        menuDropdown.classList.toggle('active');
+    });
+
+    // Close menu when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!hamburgerBtn.contains(e.target) && !menuDropdown.contains(e.target)) {
+            hamburgerBtn.classList.remove('active');
+            menuDropdown.classList.remove('active');
+        }
+    });
+
+    // Close menu when clicking on menu items
+    if (loginBtn) {
+        loginBtn.addEventListener('click', () => {
+            hamburgerBtn.classList.remove('active');
+            menuDropdown.classList.remove('active');
+        });
+    }
+    if (signupBtn) {
+        signupBtn.addEventListener('click', () => {
+            hamburgerBtn.classList.remove('active');
+            menuDropdown.classList.remove('active');
+        });
+    }
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => {
+            hamburgerBtn.classList.remove('active');
+            menuDropdown.classList.remove('active');
+        });
+    }
+}
 
 // ===== AUTHENTICATION MODAL EVENT LISTENERS =====
 

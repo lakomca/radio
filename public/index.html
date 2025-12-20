@@ -19,14 +19,23 @@
                 <button id="searchBtn" class="search-btn">Search</button>
             </div>
             
-            <div class="navbar-auth">
-                <div id="authButtons" style="display: flex; gap: 10px;">
-                    <button id="loginBtn" class="auth-btn">Login</button>
-                    <button id="signupBtn" class="auth-btn">Sign Up</button>
-                </div>
-                <div id="userProfile" style="display: none;">
-                    <span id="usernameDisplay"></span>
-                    <button id="logoutBtn" class="auth-btn">Logout</button>
+            <div class="navbar-menu">
+                <button id="hamburgerBtn" class="hamburger-btn" aria-label="Menu">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+                <div id="menuDropdown" class="menu-dropdown">
+                    <div id="authButtons" style="display: none;">
+                        <button id="loginBtn" class="menu-item">Login</button>
+                        <button id="signupBtn" class="menu-item">Sign Up</button>
+                    </div>
+                    <div id="userProfile" style="display: none;">
+                        <div class="menu-user-info">
+                            <span id="usernameDisplay"></span>
+                        </div>
+                        <button id="logoutBtn" class="menu-item">Logout</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -88,9 +97,7 @@
                             <input type="range" id="volumeSlider" min="0" max="100" value="70">
                         </div>
                     </div>
-                </div>
-                
-                <div class="player-progress-section">
+                    
                     <div class="progress-container">
                         <div class="progress-info">
                             <span id="currentTime">0:00</span>
@@ -102,7 +109,7 @@
                             <div class="progress-thumb" id="progressThumb"></div>
                         </div>
                     </div>
-                    </div>
+                </div>
                 </div>
             </div>
         </div>
