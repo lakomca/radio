@@ -430,6 +430,7 @@ const activeStreams = new Map();
 const streamQueue = [];
 let isProcessingQueue = false;
 const STREAM_TIMEOUT = 30 * 60 * 1000; // 30 minutes in milliseconds
+const activeStreamRequests = new Map(); // Track active requests by URL to prevent duplicates
 
 // CORS middleware
 app.use((req, res, next) => {
@@ -455,6 +456,23 @@ async function processStreamQueue() {
             continue;
         }
         
+        // Check if we're already processing this URL
+        if (activeStreamRequests.has(youtubeUrl)) {
+            console.log(`Skipping duplicate request for: ${youtubeUrl}`);
+            // Send a response indicating the stream is already being processed
+            if (!res.headersSent) {
+                res.status(409).json({ 
+                    error: 'Stream already being processed', 
+                    details: 'A stream for this URL is already in progress. Please wait.',
+                    hint: 'If the stream doesn\'t start, try again in a moment.'
+                });
+            }
+            continue;
+        }
+        
+        // Mark this URL as being processed
+        activeStreamRequests.set(youtubeUrl, { req, res, startTime: Date.now() });
+        
         try {
             await processStreamRequest(req, res, youtubeUrl);
         } catch (error) {
@@ -465,6 +483,9 @@ async function processStreamQueue() {
                     details: error.message 
                 });
             }
+        } finally {
+            // Remove from active requests after processing completes or fails
+            activeStreamRequests.delete(youtubeUrl);
         }
         
         // Small delay between queue items to prevent overwhelming the system
@@ -645,10 +666,16 @@ async function processStreamRequest(req, res, youtubeUrl) {
             });
 
             // Pipe ffmpeg output to response with chunked progressive streaming
+            let streamStarted = false;
             ffmpeg.stdout.on('data', (chunk) => {
                 if (firstChunk) {
                     console.log(`FFmpeg started streaming, first chunk size: ${chunk.length} bytes`);
                     firstChunk = false;
+                    // Resolve the promise once streaming starts successfully
+                    if (!streamStarted) {
+                        streamStarted = true;
+                        resolve(); // Resolve immediately after first chunk to unblock queue
+                    }
                 }
                 
                 if (!hasError && !res.destroyed) {
@@ -682,7 +709,7 @@ async function processStreamRequest(req, res, youtubeUrl) {
                 // If the client disconnected (common when switching tracks), ffmpeg will be killed and may exit non-zero.
                 if (clientDisconnected) {
                     console.log(`FFmpeg exited with code ${code} (client disconnected)`);
-                    resolve();
+                    // Don't resolve/reject here - already resolved when stream started
                     return;
                 }
                 
@@ -700,7 +727,9 @@ async function processStreamRequest(req, res, youtubeUrl) {
                             code: code
                         });
                     }
-                    reject(new Error(`FFmpeg exit code ${code}`));
+                    if (!streamStarted) {
+                        reject(new Error(`FFmpeg exit code ${code}`));
+                    }
                     return;
                 } else if (code !== 0 && code !== 1) {
                     console.error(`FFmpeg exited with error code: ${code}`);
@@ -712,11 +741,13 @@ async function processStreamRequest(req, res, youtubeUrl) {
                             code: code
                         });
                     }
-                    reject(new Error(`FFmpeg exit code ${code}`));
+                    if (!streamStarted) {
+                        reject(new Error(`FFmpeg exit code ${code}`));
+                    }
                     return;
                 }
                 
-                if (!res.headersSent && !hasError) {
+                if (!res.headersSent && !hasError && !streamStarted) {
                     res.status(500).json({ 
                         error: 'Stream failed to start', 
                         details: 'FFmpeg process ended before streaming started',
@@ -728,7 +759,6 @@ async function processStreamRequest(req, res, youtubeUrl) {
                     // Only end if headers were sent (stream was started)
                     // This allows the stream to end naturally when video finishes
                     res.end();
-                    resolve();
                 }
             });
 
@@ -743,7 +773,7 @@ async function processStreamRequest(req, res, youtubeUrl) {
                 } catch (err) {
                     console.error('Error killing ffmpeg:', err);
                 }
-                resolve();
+                // Don't resolve/reject here - already resolved when stream started
             });
             
             // Also handle abort
@@ -756,7 +786,7 @@ async function processStreamRequest(req, res, youtubeUrl) {
                 } catch (err) {
                     console.error('Error killing ffmpeg on abort:', err);
                 }
-                resolve();
+                // Don't resolve/reject here - already resolved when stream started
             });
 
             // Store stream reference
@@ -884,10 +914,46 @@ app.get('/radio-stream', (req, res) => {
         }
     });
 
+    let hasError = false;
     ffmpeg.stderr.on('data', (data) => {
         const msg = data.toString();
         if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('http error') || msg.toLowerCase().includes('forbidden')) {
             console.error(`FFmpeg radio-stream error: ${msg.substring(0, 200).trim()}`);
+            hasError = true;
+            
+            // Check for specific errors that should be reported to client
+            if (msg.includes('404') || msg.includes('Not Found')) {
+                if (!res.headersSent) {
+                    res.status(500).json({ 
+                        error: 'Stream URL not found', 
+                        details: 'The radio stream URL returned 404 Not Found',
+                        hint: 'The stream may be offline or the URL may be invalid'
+                    });
+                } else {
+                    res.end();
+                }
+            } else if (msg.includes('403') || msg.includes('Forbidden')) {
+                if (!res.headersSent) {
+                    res.status(500).json({ 
+                        error: 'Stream access forbidden', 
+                        details: 'The radio stream returned 403 Forbidden',
+                        hint: 'The stream may be restricted or require authentication'
+                    });
+                } else {
+                    res.end();
+                }
+            }
+        }
+    });
+
+    ffmpeg.on('error', (error) => {
+        console.error('FFmpeg radio-stream spawn error:', error);
+        hasError = true;
+        clearTimeout(processTimeout);
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'FFmpeg not found. Please install ffmpeg and add it to PATH.' });
+        } else {
+            res.end();
         }
     });
 
@@ -898,7 +964,17 @@ app.get('/radio-stream', (req, res) => {
             return;
         }
         console.log(`FFmpeg radio-stream exited with code ${code}`);
-        if (!res.destroyed) res.end();
+        
+        // If stream failed to start, send error response
+        if (code !== 0 && code !== 1 && !hasError && !res.headersSent) {
+            res.status(500).json({ 
+                error: 'Stream processing failed', 
+                details: `FFmpeg exited with code ${code}`,
+                hint: 'The stream may be unavailable or in an unsupported format'
+            });
+        } else if (!res.destroyed) {
+            res.end();
+        }
     });
 
     req.on('close', () => {

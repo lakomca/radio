@@ -89,6 +89,7 @@ let currentVideoTitle = null; // Track current video title
 let currentVideoId = null; // Track current video ID for thumbnail
 let currentStation = null; // Track current radio station with logo info
 let isLoading = false;
+let loadingUrl = null; // Track the URL currently being loaded
 let playlist = []; // Array to store playlist
 let currentIndex = -1; // Current song index in playlist
 let endedHandler = null; // Handler for ended event
@@ -689,6 +690,7 @@ async function reconnectStream() {
         // If we're stuck in a loading state (readyState 0, no buffer), loadStream() will ignore duplicates.
         // Force a restart by clearing the loading flag and resetting the media element.
         isLoading = false;
+        loadingUrl = null;
         try {
             audioPlayer.pause();
             audioPlayer.removeAttribute('src');
@@ -737,7 +739,7 @@ audioPlayer.addEventListener('timeupdate', () => {
         currentTimeDisplay.textContent = formatTime(currentTime);
         totalTimeDisplay.textContent = formatTime(displayDuration);
     } else {
-        currentTimeDisplay.textContent = formatTime(currentTime);
+            currentTimeDisplay.textContent = formatTime(currentTime);
         if (currentVideoDuration) {
             totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
         } else {
@@ -810,6 +812,7 @@ audioPlayer.addEventListener('stalled', () => {
                 audioPlayer.play().then(() => {
                     console.log('✅ Playback resumed after stall');
                     isLoading = false;
+        loadingUrl = null;
                     reconnectAttempts = 0; // Reset on successful play
                     updatePlayPauseButton(true);
                 }).catch(err => {
@@ -1191,6 +1194,13 @@ function loadStream(youtubeUrl) {
         return;
     }
     
+    // Prevent loading the same URL that's already being loaded
+    if (loadingUrl === youtubeUrl || (currentStreamUrl && currentStreamUrl.includes(encodeURIComponent(youtubeUrl)))) {
+        console.log('⚠️ Same URL already loading, ignoring duplicate request for:', youtubeUrl);
+        return;
+    }
+    
+    loadingUrl = youtubeUrl; // Track the URL being loaded
     console.log('🎵 ===== LOADING NEW STREAM =====');
     console.log('URL:', youtubeUrl);
     dbg('loadStream called', {
@@ -1228,16 +1238,38 @@ function loadStream(youtubeUrl) {
     const isYouTubeSource = /(?:youtube\.com|youtu\.be)/i.test(youtubeUrl || '');
     const looksLikeHlsOrTs = /(\.m3u8(\?|$))|(\.ts(\?|$))/i.test(youtubeUrl || '');
     
+    // Check if URL needs transcoding (formats browsers typically can't play directly)
+    // Also check for common radio streaming patterns that may need transcoding
+    const needsTranscoding = looksLikeHlsOrTs || 
+        /\.(pls|asx|wax|wvx|ram|rm|ra)(\?|$)/i.test(youtubeUrl || '') ||
+        /\/stream|\.stream|shoutcast|icecast/i.test(youtubeUrl || '') ||
+        /:\d{4,5}\//i.test(youtubeUrl || ''); // URLs with ports (common for radio streams)
+    
+    // For radio stations (international or category), prefer transcoding for better compatibility
+    // Only use direct playback for very simple, well-known formats from trusted sources
+    const isRadioStation = currentStation !== null;
+    const isDirectPlayable = !isRadioStation && // Don't use direct playback for radio stations
+                            /\.(mp3|aac|ogg|wav|m4a)(\?|$)/i.test(youtubeUrl || '') && 
+                            !needsTranscoding &&
+                            !/(shoutcast|icecast|stream)/i.test(youtubeUrl || '') &&
+                            /^https?:\/\/(www\.)?(radio|stream|listen)\./i.test(youtubeUrl || ''); // Only trusted radio domains
+    
     // Create stream URL
     // Route playback:
     // - YouTube -> backend /stream
+    // - Radio stations -> backend /radio-stream transcoder (for better compatibility with international stations)
     // - HLS (.m3u8/.ts) or other non-YouTube streams that browsers can't play -> backend /radio-stream transcoder
-    // - Simple direct radio URLs (mp3/aac) -> direct
+    // - Simple direct radio URLs (mp3/aac) from trusted sources -> direct (but will fallback to transcoder if they fail)
     const streamUrl = isYouTubeSource
         ? `/stream?url=${encodeURIComponent(youtubeUrl)}`
-        : (looksLikeHlsOrTs ? `/radio-stream?url=${encodeURIComponent(youtubeUrl)}` : youtubeUrl);
-    console.log('Stream URL:', streamUrl, `(direct=${!isYouTubeSource})`);
-    dbg('route decision', { isYouTubeSource, looksLikeHlsOrTs, streamUrl, currentSourceUrl });
+        : (isRadioStation || needsTranscoding || !isDirectPlayable 
+            ? `/radio-stream?url=${encodeURIComponent(youtubeUrl)}` 
+            : youtubeUrl);
+    console.log('Stream URL:', streamUrl, `(direct=${isDirectPlayable}, transcoded=${needsTranscoding || !isDirectPlayable}, isRadioStation=${isRadioStation})`);
+    if (isRadioStation) {
+        console.log('📻 Radio station detected - using transcoder for better compatibility');
+    }
+    dbg('route decision', { isYouTubeSource, looksLikeHlsOrTs, needsTranscoding, isDirectPlayable, isRadioStation, streamUrl, currentSourceUrl });
     
     // Check if we're reloading the same stream
     if (currentStreamUrl === streamUrl && !audioPlayer.paused) {
@@ -1386,6 +1418,7 @@ function loadStream(youtubeUrl) {
             // - Stations: let browser recover naturally
             if (hasStartedPlayback) {
                 isLoading = false;
+        loadingUrl = null;
                 if (isYouTubeSource && (audioPlayer.error.code === 2 || audioPlayer.error.code === 3 || audioPlayer.error.code === 4)) {
                     console.warn('🔄 Error after playback started (YouTube) — attempting silent reconnection...');
                     reconnectStream();
@@ -1396,12 +1429,33 @@ function loadStream(youtubeUrl) {
             }
             
             // Before playback starts, we can still attempt a reconnect if needed.
-            if (audioPlayer.error.code === 2 || audioPlayer.error.code === 4) {
-                console.log('🔄 Network or source error before playback, attempting reconnection...');
-                reconnectStream();
-            } else if (audioPlayer.error.code === 3) {
-                console.log('🔄 Decoding error before playback, attempting reconnection...');
-                reconnectStream();
+            // For radio stations, if direct playback fails, try transcoding
+            if (!isYouTubeSource && (audioPlayer.error.code === 4 || audioPlayer.error.code === 2)) {
+                // MEDIA_ERR_SRC_NOT_SUPPORTED or MEDIA_ERR_NETWORK - try transcoding
+                console.log(`🔄 Radio station error (code ${audioPlayer.error.code}), trying transcoder...`);
+                const transcodedUrl = `/radio-stream?url=${encodeURIComponent(currentSourceUrl)}`;
+                if (currentStreamUrl !== transcodedUrl) {
+                    console.log('🔄 Switching to transcoded stream:', transcodedUrl);
+                    isLoading = false;
+                    loadingUrl = null;
+                    currentStreamUrl = transcodedUrl;
+                    setTimeout(() => {
+                        audioPlayer.src = transcodedUrl;
+                        audioPlayer.load();
+                    }, 100);
+                    return;
+                }
+            }
+            
+            // For YouTube or other sources, attempt reconnection
+            if (isYouTubeSource || (!isYouTubeSource && audioPlayer.error.code !== 2 && audioPlayer.error.code !== 4)) {
+                if (audioPlayer.error.code === 2 || audioPlayer.error.code === 4) {
+                    console.log('🔄 Network or source error before playback, attempting reconnection...');
+                    reconnectStream();
+                } else if (audioPlayer.error.code === 3) {
+                    console.log('🔄 Decoding error before playback, attempting reconnection...');
+                    reconnectStream();
+                }
             }
         }
     }, { once: true });
@@ -1438,6 +1492,7 @@ function loadStream(youtubeUrl) {
         if (isLoading) {
             console.error('⏱️ Final timeout (25s) - giving up on loading');
             isLoading = false;
+        loadingUrl = null;
             playPauseBtn.disabled = false;
             updatePlayPauseButton(false);
         }
@@ -1470,6 +1525,7 @@ function loadStream(youtubeUrl) {
                 audioPlayer.play().then(() => {
                     console.log(`✅ Audio play started (buffer: ${bufferedAhead.toFixed(2)}s, min: ${minInitialBuffer}s)`);
                     isLoading = false;
+        loadingUrl = null;
                     hasStartedPlayback = true;
                     reconnectAttempts = 0; // Reset on successful play
                     updatePlayPauseButton(true);
@@ -1477,6 +1533,7 @@ function loadStream(youtubeUrl) {
                 }).catch(err => {
                     console.error('❌ Play error:', err);
                     isLoading = false;
+        loadingUrl = null;
                     isHandlingEnded = false;
                     cleanupLoad();
                 });
@@ -1493,6 +1550,7 @@ function loadStream(youtubeUrl) {
                             audioPlayer.play().then(() => {
                                 console.log(`✅ Audio play started after buffering (buffer: ${newBuffered.toFixed(2)}s, min: ${minInitialBuffer}s)`);
                                 isLoading = false;
+        loadingUrl = null;
                                 hasStartedPlayback = true;
                                 reconnectAttempts = 0;
                                 updatePlayPauseButton(true);
@@ -1500,6 +1558,7 @@ function loadStream(youtubeUrl) {
                             }).catch(err => {
                                 console.error('❌ Play error after buffering:', err);
                                 isLoading = false;
+        loadingUrl = null;
                                 cleanupLoad();
                             });
                         } else {
@@ -1614,9 +1673,9 @@ function setupEndedListener() {
                 if (currentVideoDuration && totalTimeDisplay) {
                     totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
                 }
-                    loadStream(nextVideo.url);
-                    // Flag will be reset when new stream starts playing
-                    return;
+                loadStream(nextVideo.url);
+                // Flag will be reset when new stream starts playing
+                return;
             }
             
             // First try to play next from playlist (search results)
@@ -2195,7 +2254,10 @@ function displayCategoryStations(stations, category) {
 
 // Play radio station from category
 async function playCategoryStation(station) {
-    if (!station || !station.url) {
+    // Prefer url_resolved (working URL) over url (original URL)
+    const streamUrl = station.url_resolved || station.url;
+    
+    if (!station || !streamUrl) {
         alert('Invalid station URL');
         return;
     }
@@ -2212,7 +2274,7 @@ async function playCategoryStation(station) {
         refreshPlayerFavoriteButton();
         
         // Load and play the stream
-        await loadStream(station.url);
+        await loadStream(streamUrl);
     } catch (error) {
         console.error('Error playing station:', error);
         alert(`Failed to play ${station.name}: ${error.message || 'Stream unavailable'}`);
