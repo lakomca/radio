@@ -1188,16 +1188,24 @@ if (playerFavoriteBtn) {
 // - YouTube URLs: stream via backend (/stream?url=...) so we can extract audio with yt-dlp + ffmpeg
 // - Non-YouTube URLs (radio stations): play directly in the browser audio element
 function loadStream(youtubeUrl) {
-    // Prevent multiple simultaneous loads
-    if (isLoading) {
-        console.log('⚠️ Already loading, ignoring duplicate request for:', youtubeUrl);
-        return;
-    }
-    
     // Prevent loading the same URL that's already being loaded
     if (loadingUrl === youtubeUrl || (currentStreamUrl && currentStreamUrl.includes(encodeURIComponent(youtubeUrl)))) {
         console.log('⚠️ Same URL already loading, ignoring duplicate request for:', youtubeUrl);
         return;
+    }
+    
+    // If loading a different URL, stop the current stream first
+    if (isLoading && loadingUrl !== youtubeUrl) {
+        console.log('⚠️ Stopping current stream to load new URL:', youtubeUrl);
+        try {
+            audioPlayer.pause();
+            audioPlayer.removeAttribute('src');
+            audioPlayer.load();
+        } catch (e) {
+            console.warn('Error stopping current stream:', e);
+        }
+        isLoading = false;
+        loadingUrl = null;
     }
     
     loadingUrl = youtubeUrl; // Track the URL being loaded
@@ -1519,54 +1527,120 @@ function loadStream(youtubeUrl) {
             const bufferedEnd = buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
             const bufferedAhead = bufferedEnd - audioPlayer.currentTime;
             
-            // Option A: require a larger initial buffer for YouTube to reduce early stalls.
-            const minInitialBuffer = isYouTubeSource ? Math.max(8, Math.floor(adaptiveBufferTarget * 0.7)) : 2;
-            if (bufferedAhead >= minInitialBuffer || (!isYouTubeSource && audioPlayer.readyState >= 3)) {
+            // Reduced buffer requirement for faster playback start
+            // YouTube: start with 3s buffer (reduced from 8s) for faster response
+            // Radio: start with 2s buffer
+            const minInitialBuffer = isYouTubeSource ? 3 : 2;
+            
+            // Also check if we have any data at all (readyState >= 2 means we have metadata and some data)
+            const hasEnoughData = bufferedAhead >= minInitialBuffer || 
+                                 audioPlayer.readyState >= 3 || 
+                                 (audioPlayer.readyState >= 2 && bufferedAhead > 0);
+            
+            if (hasEnoughData) {
+                console.log(`▶️ Starting playback (buffer: ${bufferedAhead.toFixed(2)}s, readyState: ${audioPlayer.readyState})`);
                 audioPlayer.play().then(() => {
-                    console.log(`✅ Audio play started (buffer: ${bufferedAhead.toFixed(2)}s, min: ${minInitialBuffer}s)`);
+                    console.log(`✅ Audio play started (buffer: ${bufferedAhead.toFixed(2)}s)`);
                     isLoading = false;
-        loadingUrl = null;
+                    loadingUrl = null;
                     hasStartedPlayback = true;
                     reconnectAttempts = 0; // Reset on successful play
                     updatePlayPauseButton(true);
                     cleanupLoad();
                 }).catch(err => {
                     console.error('❌ Play error:', err);
+                    console.error('Error details:', err.message, err.name);
                     isLoading = false;
-        loadingUrl = null;
+                    loadingUrl = null;
                     isHandlingEnded = false;
                     cleanupLoad();
+                    
+                    // If autoplay was blocked, enable manual play
+                    if (err.name === 'NotAllowedError' || err.message.includes('play() request')) {
+                        console.log('ℹ️ Autoplay blocked - user can click play button');
+                        playPauseBtn.disabled = false;
+                        updatePlayPauseButton(false);
+                    }
                 });
             } else {
-                // Wait for more buffer
-                console.log(`⏳ Waiting for buffer (${bufferedAhead.toFixed(2)}s < ${minInitialBuffer}s)...`);
-                // Check again in 500ms
-                setTimeout(() => {
-                    if (isLoading) {
-                        const newBuffered = audioPlayer.buffered.length > 0 
-                            ? audioPlayer.buffered.end(audioPlayer.buffered.length - 1) - audioPlayer.currentTime 
-                            : 0;
-                        if (newBuffered >= minInitialBuffer || (!isYouTubeSource && audioPlayer.readyState >= 3)) {
+                // Wait for more buffer, but with shorter timeout
+                console.log(`⏳ Waiting for buffer (${bufferedAhead.toFixed(2)}s < ${minInitialBuffer}s, readyState: ${audioPlayer.readyState})...`);
+                
+                // Set up multiple checks with increasing urgency
+                let checkCount = 0;
+                const maxChecks = 10; // Check for up to 5 seconds (10 * 500ms)
+                
+                const checkBuffer = () => {
+                    checkCount++;
+                    if (!isLoading) return; // Stream was cancelled
+                    
+                    const currentBuffered = audioPlayer.buffered.length > 0 
+                        ? audioPlayer.buffered.end(audioPlayer.buffered.length - 1) - audioPlayer.currentTime 
+                        : 0;
+                    
+                    const canPlayNow = currentBuffered >= minInitialBuffer || 
+                                      audioPlayer.readyState >= 3 ||
+                                      (audioPlayer.readyState >= 2 && currentBuffered > 0 && checkCount >= 3); // After 1.5s, start with any buffer
+                    
+                    if (canPlayNow) {
+                        console.log(`▶️ Starting playback after ${checkCount * 0.5}s wait (buffer: ${currentBuffered.toFixed(2)}s)`);
+                        audioPlayer.play().then(() => {
+                            console.log(`✅ Audio play started after buffering (buffer: ${currentBuffered.toFixed(2)}s)`);
+                            isLoading = false;
+                            loadingUrl = null;
+                            hasStartedPlayback = true;
+                            reconnectAttempts = 0;
+                            updatePlayPauseButton(true);
+                            cleanupLoad();
+                        }).catch(err => {
+                            console.error('❌ Play error after buffering:', err);
+                            isLoading = false;
+                            loadingUrl = null;
+                            cleanupLoad();
+                            
+                            // If autoplay was blocked, enable manual play
+                            if (err.name === 'NotAllowedError' || err.message.includes('play() request')) {
+                                console.log('ℹ️ Autoplay blocked - user can click play button');
+                                playPauseBtn.disabled = false;
+                                updatePlayPauseButton(false);
+                            }
+                        });
+                    } else if (checkCount < maxChecks) {
+                        // Keep checking
+                        setTimeout(checkBuffer, 500);
+                    } else {
+                        // Give up waiting and try to play anyway if we have any data
+                        if (audioPlayer.readyState >= 2 && currentBuffered > 0) {
+                            console.log(`⚠️ Buffer timeout - attempting to play with ${currentBuffered.toFixed(2)}s buffer`);
                             audioPlayer.play().then(() => {
-                                console.log(`✅ Audio play started after buffering (buffer: ${newBuffered.toFixed(2)}s, min: ${minInitialBuffer}s)`);
+                                console.log(`✅ Audio play started with minimal buffer (${currentBuffered.toFixed(2)}s)`);
                                 isLoading = false;
-        loadingUrl = null;
+                                loadingUrl = null;
                                 hasStartedPlayback = true;
                                 reconnectAttempts = 0;
                                 updatePlayPauseButton(true);
                                 cleanupLoad();
                             }).catch(err => {
-                                console.error('❌ Play error after buffering:', err);
+                                console.error('❌ Play failed after timeout:', err);
                                 isLoading = false;
-        loadingUrl = null;
+                                loadingUrl = null;
                                 cleanupLoad();
+                                playPauseBtn.disabled = false;
+                                updatePlayPauseButton(false);
                             });
                         } else {
-                            // Still not enough buffer: keep waiting (Option A)
-                            console.log(`⏳ Still waiting for buffer (${newBuffered.toFixed(2)}s < ${minInitialBuffer}s)...`);
+                            console.error('❌ No data received after 5 seconds - stream may have failed');
+                            isLoading = false;
+                            loadingUrl = null;
+                            cleanupLoad();
+                            playPauseBtn.disabled = false;
+                            updatePlayPauseButton(false);
                         }
                     }
-                }, 500);
+                };
+                
+                // Start checking after 500ms
+                setTimeout(checkBuffer, 500);
             }
         } else {
             // If isLoading is false but canplay fires, it might be buffering recovery
@@ -2716,16 +2790,24 @@ function loadMoreVideos() {
             });
         }
         
+        // Attach click handler immediately (before heart button is added)
         item.addEventListener('click', (e) => {
+            // Don't trigger if clicking on the heart button
+            if (e.target.closest('.heart-btn, .favorite-btn')) {
+                return;
+            }
+            
             e.preventDefault();
             e.stopPropagation();
             
-            if (isLoading) {
-                console.log('Already loading, ignoring click');
+            console.log('🎯 Clicked YouTube search result:', video.title, video.url);
+            console.log('Current loading state:', { isLoading, loadingUrl, currentStreamUrl });
+            
+            // If already loading the same URL, ignore duplicate click
+            if (isLoading && loadingUrl === video.url) {
+                console.log('⚠️ Same URL already loading, ignoring duplicate click');
                 return false;
             }
-            
-            console.log('Clicked video:', video.title, video.url);
             
             // Find the index in the full playlist
             currentIndex = allSearchVideos.findIndex(v => v.url === video.url);
@@ -2748,6 +2830,9 @@ function loadMoreVideos() {
                 id: v.id || getVideoIdFromUrl(v.url)
             }));
             
+            console.log('📝 Updated playlist with', playlist.length, 'videos');
+            console.log('🎵 Calling loadStream with URL:', video.url);
+            
             // Update thumbnail and title (this will also update favicon)
             updateVideoThumbnail(currentVideoId);
             updateNowPlayingTitle(video.title);
@@ -2760,6 +2845,7 @@ function loadMoreVideos() {
                 totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
             }
             
+            // Load the stream
             loadStream(video.url);
             
             return false;

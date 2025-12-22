@@ -8,26 +8,45 @@
     ],
     "rewrites": [
       {
+        "source": "/api/**",
+        "run": {
+          "serviceId": "radio-backend",
+          "region": "us-central1"
+        }
+      },
+      {
         "source": "/stream",
-        "function": "api"
+        "run": {
+          "serviceId": "radio-backend",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/radio-stream",
+        "run": {
+          "serviceId": "radio-backend",
+          "region": "us-central1"
+        }
       },
       {
         "source": "/search",
-        "function": "api"
+        "run": {
+          "serviceId": "radio-backend",
+          "region": "us-central1"
+        }
       },
       {
         "source": "/health",
-        "function": "api"
+        "run": {
+          "serviceId": "radio-backend",
+          "region": "us-central1"
+        }
       },
       {
         "source": "**",
         "destination": "/index.html"
       }
     ]
-  },
-  "functions": {
-    "source": "functions",
-    "runtime": "nodejs18"
   }
 }
 
