@@ -106,6 +106,8 @@ let downloadSpeed = 0; // Bytes per second
 let lastBufferedBytes = 0;
 let lastBufferedTime = 0;
 let speedMeasurementInterval = null;
+let waitingStartTime = null; // Track when stream started waiting
+let waitingTimeoutId = null; // Timeout ID for waiting timeout check
 // Option A (stability): don't hard-stop after a few retries during long listening sessions.
 // We'll keep retrying with backoff instead of showing a "connection failed" alert.
 let maxReconnectAttempts = 999999;
@@ -919,6 +921,26 @@ audioPlayer.addEventListener('stalled', () => {
     connectionQuality = 'poor';
     adaptiveBufferTarget = 15; // Increase buffer target after stall
     
+    // Start tracking waiting time
+    if (!waitingStartTime) {
+        waitingStartTime = Date.now();
+        // Set timeout to reconnect if waiting too long (30 seconds)
+        if (waitingTimeoutId) clearTimeout(waitingTimeoutId);
+        waitingTimeoutId = setTimeout(() => {
+            const waitDuration = Date.now() - waitingStartTime;
+            const buffered = audioPlayer.buffered;
+            const bufferedTime = buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
+            console.warn(`⚠️ Stream has been waiting for ${Math.floor(waitDuration / 1000)}s - attempting reconnection`);
+            console.warn(`  Buffered: ${bufferedTime.toFixed(2)}s, readyState: ${audioPlayer.readyState}`);
+            waitingStartTime = null;
+            waitingTimeoutId = null;
+            // Only reconnect if we're not still loading and playback has started
+            if (!isLoading && currentSourceUrl) {
+                reconnectStream();
+            }
+        }, 30000); // 30 second timeout
+    }
+    
     // If we're still loading and have some data, try to play
     if (isLoading && (audioPlayer.readyState >= 1 || bufferedTime > 0)) {
         setTimeout(() => {
@@ -932,6 +954,12 @@ audioPlayer.addEventListener('stalled', () => {
         loadingUrl = null;
                     reconnectAttempts = 0; // Reset on successful play
                     updatePlayPauseButton(true);
+                    // Clear waiting timeout on successful play
+                    if (waitingTimeoutId) {
+                        clearTimeout(waitingTimeoutId);
+                        waitingTimeoutId = null;
+                    }
+                    waitingStartTime = null;
                 }).catch(err => {
                     console.error('Play failed after stall:', err.message);
                 });
@@ -944,7 +972,39 @@ audioPlayer.addEventListener('stalled', () => {
 audioPlayer.addEventListener('waiting', () => {
     console.log('⏳ Stream waiting for data');
     dbgAudioState('waiting');
-    // Don't reload or restart - let browser handle buffering naturally
+    
+    // Start tracking waiting time if not already tracking
+    if (!waitingStartTime) {
+        waitingStartTime = Date.now();
+        // Set timeout to reconnect if waiting too long (30 seconds)
+        if (waitingTimeoutId) clearTimeout(waitingTimeoutId);
+        waitingTimeoutId = setTimeout(() => {
+            const waitDuration = Date.now() - waitingStartTime;
+            const buffered = audioPlayer.buffered;
+            const bufferedTime = buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
+            console.warn(`⚠️ Stream has been waiting for ${Math.floor(waitDuration / 1000)}s - attempting reconnection`);
+            console.warn(`  Buffered: ${bufferedTime.toFixed(2)}s, readyState: ${audioPlayer.readyState}`);
+            waitingStartTime = null;
+            waitingTimeoutId = null;
+            // Only reconnect if we're not still loading and playback has started
+            if (!isLoading && currentSourceUrl) {
+                reconnectStream();
+            }
+        }, 30000); // 30 second timeout
+    }
+});
+
+// Clear waiting timeout when playback resumes
+audioPlayer.addEventListener('playing', () => {
+    if (waitingStartTime) {
+        const waitDuration = Date.now() - waitingStartTime;
+        console.log(`✅ Playback resumed after waiting ${Math.floor(waitDuration / 1000)}s`);
+        waitingStartTime = null;
+        if (waitingTimeoutId) {
+            clearTimeout(waitingTimeoutId);
+            waitingTimeoutId = null;
+        }
+    }
 });
 
 // Don't add a global canplay listener - it will interfere with loadStream's canplay handler
@@ -1315,6 +1375,13 @@ if (playerFavoriteBtn) {
 // - YouTube URLs: stream via backend (/stream?url=...) so we can extract audio with yt-dlp + ffmpeg
 // - Non-YouTube URLs (radio stations): play directly in the browser audio element
 function loadStream(youtubeUrl) {
+    // Clear any waiting timeout when loading a new stream
+    if (waitingTimeoutId) {
+        clearTimeout(waitingTimeoutId);
+        waitingTimeoutId = null;
+    }
+    waitingStartTime = null;
+    
     // Prevent loading the same URL that's already being loaded
     if (loadingUrl === youtubeUrl || (currentStreamUrl && currentStreamUrl.includes(encodeURIComponent(youtubeUrl)))) {
         console.log('⚠️ Same URL already loading, ignoring duplicate request for:', youtubeUrl);
