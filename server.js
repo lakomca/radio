@@ -781,7 +781,7 @@ app.get('/stream', (req, res) => {
 // This avoids MEDIA_ERR_SRC_NOT_SUPPORTED when the browser cannot play the source directly.
 app.get('/radio-stream', (req, res) => {
     const sourceUrl = req.query.url;
-    console.log(`Radio-stream request received for: ${sourceUrl}`);
+    console.log(`📻 Radio-stream request received for: ${sourceUrl}`);
 
     if (!sourceUrl) {
         return res.status(400).json({ error: 'Stream URL is required' });
@@ -806,16 +806,15 @@ app.get('/radio-stream', (req, res) => {
 
     const ffmpegArgs = [
         '-user_agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        '-headers', 'Referer: https://www.youtube.com/\r\nOrigin: https://www.youtube.com\r\n',
         '-reconnect', '1',
         '-reconnect_at_eof', '1',
         '-reconnect_streamed', '1',
         '-reconnect_delay_max', '30',  // Increased to 30 seconds
         '-reconnect_on_network_error', '1',
-        '-timeout', '86400000000',  // 24 hours in microseconds (no timeout)
-        '-rw_timeout', '86400000000',  // 24 hours read/write timeout (no timeout)
-        '-analyzeduration', '2147483647',  // Maximum analysis duration (avoid premature EOF)
-        '-probesize', '2147483647',  // Maximum probe size (avoid premature EOF)
+        '-timeout', '30000000',  // 30 seconds timeout (in microseconds)
+        '-rw_timeout', '30000000',  // 30 seconds read/write timeout
+        '-analyzeduration', '10000000',  // 10 seconds analysis duration
+        '-probesize', '10000000',  // 10MB probe size
         '-fflags', '+genpts+flush_packets+discardcorrupt',  // Generate PTS, flush packets, and discard corrupt packets
         '-use_wallclock_as_timestamps', '1',  // Use wallclock timestamps for live streams (input option)
         '-i', sourceUrl,
@@ -829,7 +828,11 @@ app.get('/radio-stream', (req, res) => {
         '-'
     ];
 
+    console.log(`🚀 Starting FFmpeg for radio stream: ${sourceUrl}`);
     const ffmpeg = spawn('ffmpeg', ffmpegArgs, { shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
+    
+    let ffmpegStarted = false;
+    let firstDataReceived = false;
 
     const CHUNK_SIZE = 64 * 1024; // 64KB chunks for progressive streaming
 
@@ -838,7 +841,21 @@ app.get('/radio-stream', (req, res) => {
     let lastDataTime = Date.now();
     let bytesWritten = 0;
 
-    // Monitor for stream stalls - if no data for 30 seconds, log warning
+    // Monitor for stream stalls and startup issues
+    const startupTimeout = setTimeout(() => {
+        if (!firstDataReceived) {
+            console.error(`❌ Radio stream startup timeout: No data received after 15 seconds for ${sourceUrl}`);
+            console.error(`   FFmpeg started: ${ffmpegStarted}, Bytes written: ${bytesWritten}`);
+            if (!res.headersSent) {
+                res.status(500).json({ 
+                    error: 'Stream startup timeout', 
+                    details: 'The radio stream did not start sending data within 15 seconds',
+                    hint: 'The stream may be unavailable, blocked, or in an unsupported format'
+                });
+            }
+        }
+    }, 15000); // 15 second startup timeout
+
     const stallMonitor = setInterval(() => {
         const timeSinceLastData = Date.now() - lastDataTime;
         const streamDuration = (Date.now() - streamStartTime) / 1000;
@@ -847,7 +864,20 @@ app.get('/radio-stream', (req, res) => {
         }
     }, 10000); // Check every 10 seconds
 
+    // Track when FFmpeg process starts
+    ffmpeg.on('spawn', () => {
+        ffmpegStarted = true;
+        console.log(`✅ FFmpeg process spawned for radio stream: ${sourceUrl}`);
+    });
+
     ffmpeg.stdout.on('data', (chunk) => {
+        if (!firstDataReceived) {
+            firstDataReceived = true;
+            clearTimeout(startupTimeout);
+            const startupTime = Date.now() - streamStartTime;
+            console.log(`✅ First data received from radio stream after ${startupTime}ms: ${sourceUrl}`);
+        }
+        
         lastDataTime = Date.now();
         bytesWritten += chunk.length;
         
@@ -864,21 +894,31 @@ app.get('/radio-stream', (req, res) => {
                         break;
                     }
                 }
-            } catch {
+            } catch (err) {
                 // client likely disconnected
+                console.log('Client disconnected during radio stream write');
             }
         }
     });
 
     let hasError = false;
+    let stderrBuffer = '';
     ffmpeg.stderr.on('data', (data) => {
         const msg = data.toString();
-        if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('http error') || msg.toLowerCase().includes('forbidden')) {
-            console.error(`FFmpeg radio-stream error: ${msg.substring(0, 200).trim()}`);
+        stderrBuffer += msg;
+        
+        // Log important FFmpeg messages (not all are errors)
+        if (msg.includes('Stream #0:') || msg.includes('Input #0') || msg.includes('Output #0')) {
+            console.log(`📡 FFmpeg info: ${msg.trim()}`);
+        }
+        
+        if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('http error') || msg.toLowerCase().includes('forbidden') || msg.toLowerCase().includes('connection refused')) {
+            console.error(`❌ FFmpeg radio-stream error: ${msg.substring(0, 300).trim()}`);
             hasError = true;
             
             // Check for specific errors that should be reported to client
             if (msg.includes('404') || msg.includes('Not Found')) {
+                clearTimeout(startupTimeout);
                 if (!res.headersSent) {
                     res.status(500).json({ 
                         error: 'Stream URL not found', 
@@ -889,11 +929,23 @@ app.get('/radio-stream', (req, res) => {
                     res.end();
                 }
             } else if (msg.includes('403') || msg.includes('Forbidden')) {
+                clearTimeout(startupTimeout);
                 if (!res.headersSent) {
                     res.status(500).json({ 
                         error: 'Stream access forbidden', 
                         details: 'The radio stream returned 403 Forbidden',
                         hint: 'The stream may be restricted or require authentication'
+                    });
+                } else {
+                    res.end();
+                }
+            } else if (msg.includes('Connection refused') || msg.includes('Name or service not known')) {
+                clearTimeout(startupTimeout);
+                if (!res.headersSent) {
+                    res.status(500).json({ 
+                        error: 'Stream connection failed', 
+                        details: 'Could not connect to the radio stream server',
+                        hint: 'The stream server may be down or the URL may be incorrect'
                     });
                 } else {
                     res.end();
@@ -914,14 +966,15 @@ app.get('/radio-stream', (req, res) => {
 
     ffmpeg.on('close', (code) => {
         clearInterval(stallMonitor);
+        clearTimeout(startupTimeout);
         const streamDuration = (Date.now() - streamStartTime) / 1000;
-        console.log(`FFmpeg radio-stream exited with code ${code} after ${Math.floor(streamDuration)}s (${Math.floor(streamDuration / 60)}m ${Math.floor(streamDuration % 60)}s), bytes written: ${bytesWritten}`);
+        console.log(`FFmpeg radio-stream exited with code ${code} after ${Math.floor(streamDuration)}s (${Math.floor(streamDuration / 60)}m ${Math.floor(streamDuration % 60)}s), bytes written: ${bytesWritten}, first data received: ${firstDataReceived}`);
         
         // If stream failed to start, send error response
         if (code !== 0 && code !== 1 && !hasError && !res.headersSent) {
             res.status(500).json({ 
                 error: 'Stream processing failed', 
-                details: `FFmpeg exited with code ${code} after ${Math.floor(streamDuration)}s`,
+                details: `FFmpeg exited with code ${code} after ${Math.floor(streamDuration)}s. First data received: ${firstDataReceived}`,
                 hint: 'The stream may be unavailable or in an unsupported format'
             });
         } else if (!res.destroyed) {
@@ -1417,22 +1470,50 @@ app.get('/api/radio/search', async (req, res) => {
         
         console.log(`Proxying Radio Browser API request: ${apiUrl}`);
         
-        // Fetch from Radio Browser API (server-side, no CORS issues)
-        const response = await fetch(apiUrl, {
-            headers: {
-                'User-Agent': 'Radio App/1.0'
+        // Create AbortController for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        
+        try {
+            // Fetch from Radio Browser API (server-side, no CORS issues)
+            const response = await fetch(apiUrl, {
+                headers: {
+                    'User-Agent': 'Radio App/1.0'
+                },
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+                const errorText = await response.text().catch(() => 'Unknown error');
+                console.error(`Radio Browser API error: ${response.status} ${response.statusText}`, errorText);
+                throw new Error(`Radio Browser API returned ${response.status}: ${errorText}`);
             }
-        });
-        
-        if (!response.ok) {
-            throw new Error(`Radio Browser API returned ${response.status}`);
+            
+            const stations = await response.json();
+            
+            if (!Array.isArray(stations)) {
+                console.warn('Radio Browser API returned non-array response:', typeof stations);
+                return res.json([]);
+            }
+            
+            res.json(stations);
+        } catch (fetchError) {
+            clearTimeout(timeoutId);
+            if (fetchError.name === 'AbortError') {
+                throw new Error('Request timeout: Radio Browser API took too long to respond');
+            }
+            throw fetchError;
         }
-        
-        const stations = await response.json();
-        res.json(stations);
     } catch (error) {
         console.error('Error proxying Radio Browser API search:', error);
-        res.status(500).json({ error: 'Failed to search stations', details: error.message });
+        console.error('Error stack:', error.stack);
+        res.status(500).json({ 
+            error: 'Failed to search stations', 
+            details: error.message,
+            tag: req.query.tag
+        });
     }
 });
 
