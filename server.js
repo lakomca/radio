@@ -1833,6 +1833,7 @@ const server = app.listen(PORT, '0.0.0.0', () => {
         console.log(`Or manually kill the process using: netstat -ano | findstr :${PORT}`);
         process.exit(1);
     } else {
+        console.error('Server listen error:', err);
         throw err;
     }
 });
