@@ -1848,15 +1848,22 @@ if (server) {
 // Handle uncaught errors gracefully
 process.on('uncaughtException', (err) => {
     console.error('Uncaught Exception:', err);
-    // Don't exit in production, let Railway handle restarts
+    console.error('Stack:', err.stack);
+    // In production, log but don't exit - let Railway handle restarts
+    // In development, exit to catch issues early
     if (process.env.NODE_ENV !== 'production') {
         process.exit(1);
     }
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-    // Don't exit in production, let Railway handle restarts
+    console.error('Unhandled Rejection at:', promise);
+    console.error('Reason:', reason);
+    if (reason && reason.stack) {
+        console.error('Stack:', reason.stack);
+    }
+    // In production, log but don't exit - let Railway handle restarts
+    // In development, exit to catch issues early
     if (process.env.NODE_ENV !== 'production') {
         process.exit(1);
     }
