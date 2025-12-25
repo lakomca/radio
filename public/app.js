@@ -2647,13 +2647,11 @@ async function loadStationsForGenre(genreTag, genreName) {
     if (backToCountriesBtn) backToCountriesBtn.style.display = 'none';
     
     try {
-        // Search Radio Browser API for stations by tag/genre
+        // Use backend proxy to avoid CORS issues
         const response = await fetch(
-            `https://de1.api.radio-browser.info/json/stations/search?tag=${encodeURIComponent(genreTag)}&limit=100&order=clickcount&reverse=true`,
+            `/api/radio/search?tag=${encodeURIComponent(genreTag)}&limit=100&order=clickcount&reverse=true`,
             {
-                headers: {
-                    'User-Agent': 'Radio App/1.0'
-                }
+                credentials: 'include'
             }
         );
         

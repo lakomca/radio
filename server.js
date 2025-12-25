@@ -1354,6 +1354,39 @@ app.get('/api/radio/stations/:countryCode', async (req, res) => {
     }
 });
 
+// Proxy endpoint for Radio Browser API searches (to avoid CORS issues)
+app.get('/api/radio/search', async (req, res) => {
+    try {
+        const { tag, limit = 100, order = 'clickcount', reverse = 'true' } = req.query;
+        
+        if (!tag) {
+            return res.status(400).json({ error: 'Tag parameter is required' });
+        }
+        
+        // Build the Radio Browser API URL
+        const apiUrl = `${RADIO_BROWSER_API}/stations/search?tag=${encodeURIComponent(tag)}&limit=${limit}&order=${order}&reverse=${reverse}`;
+        
+        console.log(`Proxying Radio Browser API request: ${apiUrl}`);
+        
+        // Fetch from Radio Browser API (server-side, no CORS issues)
+        const response = await fetch(apiUrl, {
+            headers: {
+                'User-Agent': 'Radio App/1.0'
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Radio Browser API returned ${response.status}`);
+        }
+        
+        const stations = await response.json();
+        res.json(stations);
+    } catch (error) {
+        console.error('Error proxying Radio Browser API search:', error);
+        res.status(500).json({ error: 'Failed to search stations', details: error.message });
+    }
+});
+
 // Get working stream URL for a station (try multiple URLs)
 app.get('/api/radio/stream/:stationId', async (req, res) => {
     try {
