@@ -444,7 +444,6 @@ app.use((req, res, next) => {
 });
 
 // Set very long timeouts for streaming endpoints (before routes are defined)
-const INFINITE_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 app.use('/stream', (req, res, next) => {
     req.setTimeout(INFINITE_TIMEOUT);
     res.setTimeout(INFINITE_TIMEOUT);
@@ -664,25 +663,6 @@ async function processStreamRequest(req, res, youtubeUrl) {
                     }
                 }
             });
-
-            // Track stream duration to detect premature endings
-            let streamDuration = null;
-            let streamStartTime = Date.now();
-            
-            // Parse duration from FFmpeg stderr
-            ffmpeg.stderr.on('data', (data) => {
-                const msg = data.toString();
-                // Extract duration from FFmpeg output (format: Duration: HH:MM:SS.mm)
-                const durationMatch = msg.match(/Duration:\s*(\d{2}):(\d{2}):(\d{2})\.(\d{2})/);
-                if (durationMatch && !streamDuration) {
-                    const hours = parseInt(durationMatch[1]);
-                    const minutes = parseInt(durationMatch[2]);
-                    const seconds = parseInt(durationMatch[3]);
-                    const centiseconds = parseInt(durationMatch[4]);
-                    streamDuration = hours * 3600 + minutes * 60 + seconds + centiseconds / 100;
-                    console.log(`Detected video duration: ${streamDuration.toFixed(2)} seconds`);
-                }
-            });
             
             // Handle stream end
             ffmpeg.on('close', (code) => {
@@ -770,7 +750,6 @@ app.get('/stream', (req, res) => {
     }
 
     // Disable timeouts for streaming connections (use very large value)
-    const INFINITE_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
     req.setTimeout(INFINITE_TIMEOUT);
     res.setTimeout(INFINITE_TIMEOUT);
     if (req.socket) {
@@ -801,7 +780,6 @@ app.get('/radio-stream', (req, res) => {
     }
 
     // Disable timeouts for streaming connections (use very large value)
-    const INFINITE_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
     req.setTimeout(INFINITE_TIMEOUT);
     res.setTimeout(INFINITE_TIMEOUT);
     if (req.socket) {
