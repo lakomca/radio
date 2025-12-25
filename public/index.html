@@ -103,13 +103,15 @@
                             <input type="range" id="volumeSlider" min="0" max="100" value="70">
                         </div>
                     </div>
-                    
                     <div class="progress-container">
+                        <!-- Current time display -->
                         <div class="progress-info">
                             <span id="currentTime">0:00</span>
-                            <span id="totalTime">0:00</span>
                         </div>
-                        <div class="custom-progress-bar" id="customProgressBar">
+                        <!-- Visual Equalizer - replaces progress bar -->
+                        <canvas id="equalizerCanvas"></canvas>
+                        <!-- Hidden progress bar elements (kept for compatibility) -->
+                        <div class="custom-progress-bar" id="customProgressBar" style="display: none;">
                             <div class="progress-track" id="progressTrack"></div>
                             <div class="progress-fill" id="progressFill"></div>
                             <div class="progress-thumb" id="progressThumb"></div>

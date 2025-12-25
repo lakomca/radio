@@ -24,6 +24,7 @@ const currentTimeDisplay = document.getElementById('currentTime');
 const totalTimeDisplay = document.getElementById('totalTime');
 const nowPlayingTitle = document.getElementById('nowPlayingTitle');
 const videoThumbnail = document.getElementById('videoThumbnail');
+const equalizerCanvas = document.getElementById('equalizerCanvas');
 // Navbar brand removed - always shows PULSE
 
 // ===== DEBUG LOGGING =====
@@ -803,14 +804,23 @@ audioPlayer.addEventListener('timeupdate', () => {
             }
         }
         
-        currentTimeDisplay.textContent = formatTime(currentTime);
-        totalTimeDisplay.textContent = formatTime(displayDuration);
-    } else {
+        if (currentTimeDisplay) {
             currentTimeDisplay.textContent = formatTime(currentTime);
-        if (currentVideoDuration) {
-            totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
-        } else {
-        totalTimeDisplay.textContent = '--:--';
+        }
+        if (totalTimeDisplay) {
+            totalTimeDisplay.textContent = formatTime(displayDuration);
+        }
+    } else {
+        if (currentTimeDisplay) {
+            currentTimeDisplay.textContent = formatTime(currentTime);
+        }
+        // Note: totalTimeDisplay may not exist in HTML, so we check before using it
+        if (totalTimeDisplay) {
+            if (currentVideoDuration) {
+                totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
+            } else {
+                totalTimeDisplay.textContent = '--:--';
+            }
         }
         // Reset progress bar when no duration
         if (progressFill) {
@@ -953,7 +963,17 @@ Object.defineProperty(audioPlayer, 'src', {
         if (this.src && value && this.src !== value) {
             console.log('⚠️ Source changed while playing - this might cause restart!');
         }
+        const wasPlaying = !this.paused;
         originalSrcSetter.call(this, value);
+        
+        // Reconnect equalizer if it's active (check if equalizer is initialized)
+        if (typeof isEqualizerActive !== 'undefined' && isEqualizerActive && typeof connectAudioToAnalyser !== 'undefined' && wasPlaying) {
+            setTimeout(() => {
+                if (!this.paused && this.src) {
+                    connectAudioToAnalyser();
+                }
+            }, 100);
+        }
     },
     get: function() {
         return this.getAttribute('src');
@@ -1675,6 +1695,16 @@ function loadStream(youtubeUrl) {
                     isLoading = false;
                     loadingUrl = null;
                     hasStartedPlayback = true;
+                    // Auto-start equalizer when audio starts playing (always on by default)
+                    if (!isEqualizerActive && !audioElementAlreadyConnected) {
+                        // Small delay to ensure audio element is ready
+                        setTimeout(() => {
+                            // Double-check the flag before starting
+                            if (!audioElementAlreadyConnected && !isEqualizerActive) {
+                                startEqualizer();
+                            }
+                        }, 200);
+                    }
                     reconnectAttempts = 0; // Reset on successful play
                     updatePlayPauseButton(true);
                     cleanupLoad();
@@ -3980,4 +4010,266 @@ if (authFormElement) {
         }
     });
 }
+
+// ===== VISUAL EQUALIZER =====
+let audioContext = null;
+let analyser = null;
+let dataArray = null;
+let source = null;
+let animationFrameId = null;
+let isEqualizerActive = false;
+let audioElementAlreadyConnected = false; // Flag to prevent trying to connect if already connected elsewhere
+const NUM_BARS = 32; // Number of frequency bars
+
+// Initialize Web Audio API
+function initAudioContext() {
+    if (!audioContext) {
+        try {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 256; // Higher resolution for smoother visualization
+            analyser.smoothingTimeConstant = 0.8; // Smooth transitions
+            
+            const bufferLength = analyser.frequencyBinCount;
+            dataArray = new Uint8Array(bufferLength);
+        } catch (error) {
+            console.error('Error initializing audio context:', error);
+            return false;
+        }
+    }
+    return true;
+}
+
+// Connect audio player to analyser
+function connectAudioToAnalyser() {
+    if (!audioContext || !analyser || !audioPlayer) return false;
+    
+    // If we've already determined the audio element is connected elsewhere, don't try again
+    if (audioElementAlreadyConnected) {
+        console.warn('⚠️ Audio element already connected elsewhere. Equalizer cannot be used.');
+        return false;
+    }
+    
+    try {
+        // Check if we already have a source connected to this audio element
+        // You can only create one MediaElementSourceNode per audio element
+        // Once created, we must reuse it
+        if (source) {
+            // Source already exists, just reconnect the analyser chain
+            try {
+                source.disconnect();
+                source.connect(analyser);
+                analyser.connect(audioContext.destination);
+                return true;
+            } catch (e) {
+                // If disconnect fails, source might be in a bad state
+                console.warn('Failed to reconnect existing source:', e);
+                source = null;
+            }
+        }
+        
+        // Create media source from audio element (only if not already created)
+        // Note: This will fail if the audio element was already connected elsewhere
+        // In that case, we can't use the equalizer with this audio element
+        if (!source) {
+            source = audioContext.createMediaElementSource(audioPlayer);
+        }
+        source.connect(analyser);
+        analyser.connect(audioContext.destination);
+        
+        return true;
+    } catch (error) {
+        console.error('Error connecting audio to analyser:', error);
+        // If error is "already connected", the audio element was connected elsewhere
+        // We can't use the equalizer in this case - set flag to prevent trying again
+        if (error.message && (error.message.includes('already connected') || error.name === 'InvalidStateError')) {
+            console.warn('⚠️ Audio element already connected to another MediaElementSourceNode. Equalizer cannot be used.');
+            console.warn('This usually happens if the audio element was connected to Web Audio API elsewhere.');
+            audioElementAlreadyConnected = true; // Set flag to prevent trying again
+            source = null; // Clear source so we don't try to reuse it
+        }
+        return false;
+    }
+}
+
+// Draw equalizer bars
+function drawEqualizer() {
+    if (!equalizerCanvas || !analyser || !dataArray || !isEqualizerActive) {
+        return;
+    }
+    
+    const canvas = equalizerCanvas;
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    // Clear canvas
+    ctx.fillStyle = '#0a1a1f';
+    ctx.fillRect(0, 0, width, height);
+    
+    // Get frequency data
+    analyser.getByteFrequencyData(dataArray);
+    
+    // Calculate bar dimensions
+    const barWidth = width / NUM_BARS;
+    const barGap = barWidth * 0.1; // 10% gap between bars
+    const actualBarWidth = barWidth - barGap;
+    
+    // Draw bars
+    for (let i = 0; i < NUM_BARS; i++) {
+        // Map to frequency data (use logarithmic distribution for better visualization)
+        const dataIndex = Math.floor((i / NUM_BARS) * dataArray.length);
+        const barHeight = (dataArray[dataIndex] / 255) * height;
+        
+        const x = i * barWidth + barGap / 2;
+        const y = height - barHeight;
+        
+        // Create gradient for each bar
+        const gradient = ctx.createLinearGradient(x, y, x, height);
+        
+        // Use theme colors: cyan -> orange gradient
+        const intensity = dataArray[dataIndex] / 255;
+        if (intensity > 0.7) {
+            // High intensity: orange/red
+            gradient.addColorStop(0, '#ff8800');
+            gradient.addColorStop(0.5, '#ffaa33');
+            gradient.addColorStop(1, '#00d9ff');
+        } else if (intensity > 0.4) {
+            // Medium intensity: orange/cyan
+            gradient.addColorStop(0, '#ffaa33');
+            gradient.addColorStop(0.5, '#00d9ff');
+            gradient.addColorStop(1, '#00b8d4');
+        } else {
+            // Low intensity: cyan/blue
+            gradient.addColorStop(0, '#00d9ff');
+            gradient.addColorStop(0.5, '#00b8d4');
+            gradient.addColorStop(1, '#0097a7');
+        }
+        
+        ctx.fillStyle = gradient;
+        ctx.fillRect(x, y, actualBarWidth, barHeight);
+        
+        // Add glow effect for active bars
+        if (barHeight > 5) {
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#00d9ff';
+            ctx.fillRect(x, y, actualBarWidth, barHeight);
+            ctx.shadowBlur = 0;
+        }
+    }
+    
+    // Continue animation
+    animationFrameId = requestAnimationFrame(drawEqualizer);
+}
+
+// Start equalizer
+function startEqualizer() {
+    if (isEqualizerActive) {
+        console.log('Equalizer already active');
+        return true; // Return true if already active
+    }
+    
+    // Check if audio element is already connected elsewhere
+    if (audioElementAlreadyConnected) {
+        console.warn('⚠️ Cannot start equalizer: Audio element already connected to another MediaElementSourceNode.');
+        // Return false to indicate failure, but don't show alert here
+        // Let the caller decide whether to show an alert
+        return false;
+    }
+    
+    if (!initAudioContext()) {
+        console.error('Failed to initialize audio context');
+        return false;
+    }
+    
+    // Resume audio context if suspended (required by some browsers)
+    if (audioContext.state === 'suspended') {
+        audioContext.resume();
+    }
+    
+    if (!connectAudioToAnalyser()) {
+        console.error('Failed to connect audio to analyser');
+        // Check flag again - it might have been set during connectAudioToAnalyser
+        if (audioElementAlreadyConnected) {
+            // Don't show alert here - let the caller decide
+            return false;
+        }
+        return false;
+    }
+    
+    // Set canvas size and ensure it's always visible
+    if (equalizerCanvas) {
+        const rect = equalizerCanvas.getBoundingClientRect();
+        equalizerCanvas.width = rect.width || equalizerCanvas.offsetWidth || 400;
+        equalizerCanvas.height = 60; // Fixed height for equalizer
+        equalizerCanvas.style.display = 'block'; // Always visible - part of player
+    }
+    
+    isEqualizerActive = true;
+    drawEqualizer();
+    return true; // Return true on success
+}
+
+// Stop equalizer
+function stopEqualizer() {
+    if (!isEqualizerActive) return;
+    
+    isEqualizerActive = false;
+    
+    if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+    }
+    
+    // Clear canvas
+    if (equalizerCanvas) {
+        const ctx = equalizerCanvas.getContext('2d');
+        ctx.clearRect(0, 0, equalizerCanvas.width, equalizerCanvas.height);
+        ctx.fillStyle = '#0a1a1f';
+        ctx.fillRect(0, 0, equalizerCanvas.width, equalizerCanvas.height);
+    }
+    
+    // Disconnect source
+    if (source) {
+        try {
+            source.disconnect();
+        } catch (e) {
+            // Ignore
+        }
+        source = null;
+    }
+}
+
+// Equalizer is now always on by default - no button needed
+// The equalizer will auto-start when audio begins playing
+
+// Equalizer reconnection is handled in the existing src setter above
+
+// Start equalizer when audio starts playing
+audioPlayer.addEventListener('play', () => {
+    if (equalizerCanvas && equalizerCanvas.style.display !== 'none' && playerHeader && playerHeader.classList.contains('equalizer-active')) {
+        if (!isEqualizerActive) {
+            startEqualizer();
+        } else if (audioContext && audioContext.state === 'suspended') {
+            audioContext.resume().then(() => {
+                connectAudioToAnalyser();
+            });
+        }
+    }
+});
+
+// Stop equalizer when audio pauses
+audioPlayer.addEventListener('pause', () => {
+    // Keep equalizer running but it will show no activity
+    // This allows smooth transitions
+});
+
+// Handle window resize
+window.addEventListener('resize', () => {
+    if (equalizerCanvas && isEqualizerActive) {
+        const rect = equalizerCanvas.getBoundingClientRect();
+        equalizerCanvas.width = rect.width;
+        equalizerCanvas.height = 60; // Fixed height for equalizer
+    }
+});
 

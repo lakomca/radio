@@ -528,9 +528,11 @@ async function processStreamRequest(req, res, youtubeUrl) {
                 '-reconnect_on_network_error', '1',
                 '-timeout', '86400000000',  // 24 hours in microseconds (no timeout)
                 '-rw_timeout', '86400000000',  // 24 hours read/write timeout (no timeout)
-                '-fflags', '+genpts+flush_packets',  // Generate PTS and flush packets for progressive streaming
+                '-fflags', '+genpts+flush_packets+discardcorrupt',  // Generate PTS, flush packets, and discard corrupt packets
                 '-avoid_negative_ts', 'make_zero',  // Prevent timestamp issues
                 '-flush_packets', '1',  // Flush packets immediately for progressive streaming
+                '-analyzeduration', '2147483647',  // Maximum analysis duration (avoid premature EOF)
+                '-probesize', '2147483647',  // Maximum probe size (avoid premature EOF)
                 '-'
             ];
             
@@ -545,12 +547,26 @@ async function processStreamRequest(req, res, youtubeUrl) {
             let bytesWritten = 0;
             const CHUNK_SIZE = 64 * 1024; // 64KB chunks for progressive streaming
 
+            // Track stream duration to detect premature endings
+            let streamDuration = null;
+            let streamStartTime = Date.now();
+            
             // Handle ffmpeg errors
             ffmpeg.stderr.on('data', (data) => {
                 const msg = data.toString();
                 // Log initial connection info
                 if (msg.includes('Stream #0') || msg.includes('Audio:') || msg.includes('Duration:')) {
                     console.log(`FFmpeg info: ${msg.substring(0, 150).trim()}`);
+                }
+                // Extract duration from FFmpeg output (format: Duration: HH:MM:SS.mm)
+                const durationMatch = msg.match(/Duration:\s*(\d{2}):(\d{2}):(\d{2})\.(\d{2})/);
+                if (durationMatch && !streamDuration) {
+                    const hours = parseInt(durationMatch[1]);
+                    const minutes = parseInt(durationMatch[2]);
+                    const seconds = parseInt(durationMatch[3]);
+                    const centiseconds = parseInt(durationMatch[4]);
+                    streamDuration = hours * 3600 + minutes * 60 + seconds + centiseconds / 100;
+                    console.log(`Detected video duration: ${streamDuration.toFixed(2)} seconds`);
                 }
                 // Check for HTTP errors (404, 403, etc.)
                 if (msg.includes('404') || msg.includes('Not Found')) {
@@ -649,9 +665,34 @@ async function processStreamRequest(req, res, youtubeUrl) {
                 }
             });
 
+            // Track stream duration to detect premature endings
+            let streamDuration = null;
+            let streamStartTime = Date.now();
+            
+            // Parse duration from FFmpeg stderr
+            ffmpeg.stderr.on('data', (data) => {
+                const msg = data.toString();
+                // Extract duration from FFmpeg output (format: Duration: HH:MM:SS.mm)
+                const durationMatch = msg.match(/Duration:\s*(\d{2}):(\d{2}):(\d{2})\.(\d{2})/);
+                if (durationMatch && !streamDuration) {
+                    const hours = parseInt(durationMatch[1]);
+                    const minutes = parseInt(durationMatch[2]);
+                    const seconds = parseInt(durationMatch[3]);
+                    const centiseconds = parseInt(durationMatch[4]);
+                    streamDuration = hours * 3600 + minutes * 60 + seconds + centiseconds / 100;
+                    console.log(`Detected video duration: ${streamDuration.toFixed(2)} seconds`);
+                }
+            });
+            
             // Handle stream end
             ffmpeg.on('close', (code) => {
-                console.log(`FFmpeg process exited with code ${code}, bytes written: ${bytesWritten}`);
+                const streamElapsed = (Date.now() - streamStartTime) / 1000;
+                console.log(`FFmpeg process exited with code ${code}, bytes written: ${bytesWritten}, stream duration: ${streamElapsed.toFixed(2)}s`);
+                
+                // Check if stream ended prematurely (before actual video duration)
+                if (streamDuration && streamElapsed < streamDuration * 0.9 && code === 0) {
+                    console.warn(`⚠️ Stream ended prematurely! Expected ${streamDuration.toFixed(2)}s but only streamed ${streamElapsed.toFixed(2)}s. URL may have expired.`);
+                }
                 
                 // Code 0 is normal exit, code 1 might be error but could also be end of stream
                 // Code 8 typically means input file error (like 404)
