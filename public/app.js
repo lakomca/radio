@@ -25,6 +25,7 @@ const totalTimeDisplay = document.getElementById('totalTime');
 const nowPlayingTitle = document.getElementById('nowPlayingTitle');
 const videoThumbnail = document.getElementById('videoThumbnail');
 const equalizerCanvas = document.getElementById('equalizerCanvas');
+const playerHeader = document.querySelector('.player-header');
 // Navbar brand removed - always shows PULSE
 
 // ===== DEBUG LOGGING =====
