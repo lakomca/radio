@@ -10,7 +10,6 @@ const volumeSlider = document.getElementById('volumeSlider');
 const volumeBtn = document.getElementById('volumeBtn');
 const volumeSliderContainer = document.getElementById('volumeSliderContainer');
 const searchQueryInput = document.getElementById('searchQuery');
-const searchBtn = document.getElementById('searchBtn');
 const searchResults = document.getElementById('searchResults');
 const playIcon = document.getElementById('playIcon');
 const pauseIcon = document.getElementById('pauseIcon');
@@ -18,6 +17,7 @@ const repeatIcon = document.getElementById('repeatIcon');
 const repeatOneIcon = document.getElementById('repeatOneIcon');
 // Autoplay UI removed (kept autoplayEnabled internally for playlist flows)
 const customProgressBar = document.getElementById('customProgressBar');
+const progressTrack = document.getElementById('progressTrack');
 const progressFill = document.getElementById('progressFill');
 const progressThumb = document.getElementById('progressThumb');
 const currentTimeDisplay = document.getElementById('currentTime');
@@ -66,6 +66,8 @@ const logoutBtn = document.getElementById('logoutBtn');
 const usernameDisplay = document.getElementById('usernameDisplay');
 const hamburgerBtn = document.getElementById('hamburgerBtn');
 const menuDropdown = document.getElementById('menuDropdown');
+const searchIconBtn = document.getElementById('searchIconBtn');
+const searchSection = document.getElementById('searchSection');
 const authFormElement = document.getElementById('authFormElement');
 const authTitle = document.getElementById('authTitle');
 const authSubmitBtn = document.getElementById('authSubmitBtn');
@@ -96,8 +98,12 @@ let endedHandler = null; // Handler for ended event
 let isBuffering = false;
 let lastCurrentTime = 0;
 let streamStartTime = null; // Track when stream started
-let connectionQuality = 'good'; // 'good', 'fair', 'poor'
+let connectionQuality = 'good'; // 'excellent', 'very-good', 'good', 'fair', 'poor'
 let reconnectAttempts = 0;
+let downloadSpeed = 0; // Bytes per second
+let lastBufferedBytes = 0;
+let lastBufferedTime = 0;
+let speedMeasurementInterval = null;
 // Option A (stability): don't hard-stop after a few retries during long listening sessions.
 // We'll keep retrying with backoff instead of showing a "connection failed" alert.
 let maxReconnectAttempts = 999999;
@@ -645,18 +651,62 @@ async function loadFavorites() {
 // Initialize auth on page load
 checkAuthStatus();
 
-// Adaptive buffering - adjusts target buffer based on connection quality
-function updateConnectionQuality(bufferedAhead, downloadSpeed) {
-    // Monitor buffered amount and adjust connection quality
-    if (bufferedAhead < 3) {
-        connectionQuality = 'poor';
-        adaptiveBufferTarget = 15; // Increase buffer target for poor connections
-    } else if (bufferedAhead < 8) {
-        connectionQuality = 'fair';
-        adaptiveBufferTarget = 10; // Moderate buffer for fair connections
-    } else {
+// Calculate download speed based on buffered data
+function calculateDownloadSpeed() {
+    if (audioPlayer.buffered.length > 0) {
+        const bufferedEnd = audioPlayer.buffered.end(audioPlayer.buffered.length - 1);
+        const now = Date.now();
+        
+        // Estimate bytes based on buffered time (rough estimate: ~16KB per second for 128kbps audio)
+        const estimatedBytesPerSecond = 16 * 1024; // 128kbps = ~16KB/s
+        const currentBufferedBytes = bufferedEnd * estimatedBytesPerSecond;
+        
+        if (lastBufferedTime > 0) {
+            const timeDelta = (now - lastBufferedTime) / 1000; // seconds
+            const bytesDelta = currentBufferedBytes - lastBufferedBytes;
+            if (timeDelta > 0) {
+                downloadSpeed = bytesDelta / timeDelta; // bytes per second
+            }
+        }
+        
+        lastBufferedBytes = currentBufferedBytes;
+        lastBufferedTime = now;
+    }
+}
+
+// Adaptive buffering - adjusts target buffer based on connection quality and download speed
+function updateConnectionQuality(bufferedAhead, downloadSpeedParam) {
+    // Calculate download speed if not provided
+    if (downloadSpeedParam === null || downloadSpeedParam === undefined) {
+        calculateDownloadSpeed();
+        downloadSpeedParam = downloadSpeed;
+    }
+    
+    // Convert bytes per second to Mbps for easier threshold comparison
+    const speedMbps = (downloadSpeedParam / (1024 * 1024)) * 8; // Convert to Mbps
+    
+    // Determine connection quality based on download speed and buffered ahead
+    // More granular levels: excellent, very-good, good, fair, poor
+    if (speedMbps >= 5 || bufferedAhead >= 60) {
+        // Excellent connection: buffer entire song/video (unlimited)
+        connectionQuality = 'excellent';
+        adaptiveBufferTarget = Infinity; // Buffer as much as possible (entire song)
+    } else if (speedMbps >= 2 || bufferedAhead >= 30) {
+        // Very good connection: buffer aggressively
+        connectionQuality = 'very-good';
+        adaptiveBufferTarget = 300; // 5 minutes buffer target
+    } else if (speedMbps >= 1 || bufferedAhead >= 15) {
+        // Good connection: buffer well ahead
         connectionQuality = 'good';
-        adaptiveBufferTarget = 5; // Lower buffer for good connections (faster start)
+        adaptiveBufferTarget = 120; // 2 minutes buffer target
+    } else if (speedMbps >= 0.5 || bufferedAhead >= 8) {
+        // Fair connection: moderate buffer
+        connectionQuality = 'fair';
+        adaptiveBufferTarget = 30; // 30 seconds buffer target
+    } else {
+        // Poor connection: minimal buffer
+        connectionQuality = 'poor';
+        adaptiveBufferTarget = 15; // 15 seconds buffer target
     }
 }
 
@@ -736,6 +786,23 @@ audioPlayer.addEventListener('timeupdate', () => {
         if (progressThumb && !isSeeking) {
             progressThumb.style.left = progressPercent + '%';
         }
+        
+        // Update buffered portion on progress-track
+        if (progressTrack && audioPlayer.buffered.length > 0 && !isSeeking) {
+            const bufferedEnd = audioPlayer.buffered.end(audioPlayer.buffered.length - 1);
+            const bufferedAhead = bufferedEnd - currentTime;
+            if (bufferedAhead > 0) {
+                const bufferedPercent = (bufferedEnd / displayDuration) * 100;
+                // Set background gradient to show buffered portion (dark grey) on progress-track
+                progressTrack.style.backgroundImage = 
+                    `linear-gradient(to right, #1a2a2f 0%, #1a2a2f ${progressPercent}%, #555555 ${progressPercent}%, #555555 ${bufferedPercent}%, #1a2a2f ${bufferedPercent}%, #1a2a2f 100%)`;
+            } else {
+                // No buffered ahead, reset to solid background
+                progressTrack.style.backgroundImage = 'none';
+                progressTrack.style.background = '#1a2a2f';
+            }
+        }
+        
         currentTimeDisplay.textContent = formatTime(currentTime);
         totalTimeDisplay.textContent = formatTime(displayDuration);
     } else {
@@ -773,20 +840,59 @@ audioPlayer.addEventListener('progress', () => {
         const currentTime = audioPlayer.currentTime;
         const bufferedAhead = bufferedEnd - currentTime;
         
-        // Update connection quality based on buffer levels
+        // Update buffered portion on progress-track (only show buffered ahead of current position)
+        if (progressTrack) {
+            const duration = audioPlayer.duration || (currentVideoDuration ? parseInt(currentVideoDuration) : null);
+            if (duration && duration > 0 && bufferedAhead > 0) {
+                const currentPercent = (currentTime / duration) * 100;
+                const bufferedPercent = (bufferedEnd / duration) * 100;
+                // Set background gradient to show buffered portion (dark grey) on progress-track
+                progressTrack.style.backgroundImage = 
+                    `linear-gradient(to right, #1a2a2f 0%, #1a2a2f ${currentPercent}%, #555555 ${currentPercent}%, #555555 ${bufferedPercent}%, #1a2a2f ${bufferedPercent}%, #1a2a2f 100%)`;
+            } else {
+                // No buffered ahead, reset to solid background
+                progressTrack.style.backgroundImage = 'none';
+                progressTrack.style.background = '#1a2a2f';
+            }
+        }
+        
+        // Update connection quality based on buffer levels and download speed
         updateConnectionQuality(bufferedAhead, null);
         
-        // Adaptive buffering threshold
-        const bufferThreshold = adaptiveBufferTarget / 2;
-        if (bufferedAhead < bufferThreshold && !audioPlayer.paused) {
+        // For excellent/very-good connections, continuously buffer ahead (entire song if possible)
+        // For other connections, use adaptive threshold
+        const isExcellentConnection = connectionQuality === 'excellent' || connectionQuality === 'very-good';
+        const bufferThreshold = isExcellentConnection ? 0 : (adaptiveBufferTarget === Infinity ? 0 : adaptiveBufferTarget / 2);
+        
+        // Check if we need to buffer (works during both playback and when paused)
+        const duration = audioPlayer.duration || (currentVideoDuration ? parseInt(currentVideoDuration) : null);
+        const shouldBuffer = duration ? bufferedAhead < Math.min(adaptiveBufferTarget, duration - currentTime) : bufferedAhead < bufferThreshold;
+        
+        if (shouldBuffer) {
             if (!isBuffering) {
                 isBuffering = true;
-                console.log(`📊 Buffering started - buffer ahead: ${bufferedAhead.toFixed(2)}s, target: ${adaptiveBufferTarget}s (${connectionQuality} connection)`);
+                const speedInfo = downloadSpeed > 0 ? ` (${(downloadSpeed / (1024 * 1024) * 8).toFixed(2)} Mbps)` : '';
+                console.log(`📊 Buffering started - buffer ahead: ${bufferedAhead.toFixed(2)}s, target: ${adaptiveBufferTarget === Infinity ? 'entire song' : adaptiveBufferTarget + 's'} (${connectionQuality} connection${speedInfo})`);
             }
-        } else if (isBuffering && bufferedAhead > adaptiveBufferTarget) {
+        } else if (isBuffering) {
             isBuffering = false;
-            console.log(`✅ Buffering complete - buffer ahead: ${bufferedAhead.toFixed(2)}s (${connectionQuality} connection)`);
+            const speedInfo = downloadSpeed > 0 ? ` (${(downloadSpeed / (1024 * 1024) * 8).toFixed(2)} Mbps)` : '';
+            console.log(`✅ Buffering complete - buffer ahead: ${bufferedAhead.toFixed(2)}s (${connectionQuality} connection${speedInfo})`);
         }
+        
+        // For excellent connections, try to buffer entire song continuously
+        if (isExcellentConnection && duration && bufferedAhead < duration - currentTime - 1) {
+            // Keep buffering - the browser will continue downloading
+            // We can't force it, but we can ensure playback doesn't pause
+            if (audioPlayer.paused && !isLoading) {
+                // If paused and we have good connection, keep buffering in background
+                // The browser will continue downloading
+            }
+        }
+    } else if (progressTrack) {
+        // Reset buffered portion on progress-track if no buffered data
+        progressTrack.style.backgroundImage = 'none';
+        progressTrack.style.background = '#1a2a2f';
     }
 });
 
@@ -1312,15 +1418,22 @@ function loadStream(youtubeUrl) {
         lastCurrentTime = 0;
         isBuffering = false;
         if (currentTimeDisplay) currentTimeDisplay.textContent = '0:00';
+        if (progressTrack) {
+            progressTrack.style.backgroundImage = 'none';
+            progressTrack.style.background = '#1a2a2f';
+        }
         if (progressFill) progressFill.style.width = '0%';
         if (progressThumb) progressThumb.style.left = '0%';
     } catch (e) {
         console.warn('Error resetting audio player:', e);
     }
     
-    // Reset reconnection attempts for new stream
+    // Reset reconnection attempts and download speed tracking for new stream
     reconnectAttempts = 0;
     connectionQuality = 'good';
+    downloadSpeed = 0;
+    lastBufferedBytes = 0;
+    lastBufferedTime = 0;
     
     // Prefer stability for YouTube (Option A): buffer longer, fewer restarts
     adaptiveBufferTarget = isYouTubeSource ? 12 : 5; // seconds
@@ -1389,6 +1502,10 @@ function loadStream(youtubeUrl) {
         updateNavigationButtons();
         // Ensure time display is reset when new stream loads
         if (currentTimeDisplay) currentTimeDisplay.textContent = '0:00';
+        if (progressTrack) {
+            progressTrack.style.backgroundImage = 'none';
+            progressTrack.style.background = '#1a2a2f';
+        }
         if (progressFill) progressFill.style.width = '0%';
         if (progressThumb) progressThumb.style.left = '0%';
     }, { once: true });
@@ -1466,12 +1583,12 @@ function loadStream(youtubeUrl) {
             
             // For YouTube or other sources, attempt reconnection
             if (isYouTubeSource || (!isYouTubeSource && audioPlayer.error.code !== 2 && audioPlayer.error.code !== 4)) {
-                if (audioPlayer.error.code === 2 || audioPlayer.error.code === 4) {
-                    console.log('🔄 Network or source error before playback, attempting reconnection...');
-                    reconnectStream();
-                } else if (audioPlayer.error.code === 3) {
-                    console.log('🔄 Decoding error before playback, attempting reconnection...');
-                    reconnectStream();
+            if (audioPlayer.error.code === 2 || audioPlayer.error.code === 4) {
+                console.log('🔄 Network or source error before playback, attempting reconnection...');
+                reconnectStream();
+            } else if (audioPlayer.error.code === 3) {
+                console.log('🔄 Decoding error before playback, attempting reconnection...');
+                reconnectStream();
                 }
             }
         }
@@ -1536,17 +1653,20 @@ function loadStream(youtubeUrl) {
             const bufferedEnd = buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
             const bufferedAhead = bufferedEnd - audioPlayer.currentTime;
             
-            // Reduced buffer requirement for faster playback start
-            // YouTube: start with 2s buffer for faster response
-            // Radio: start with 2s buffer
+            // Initial buffer requirements (adaptive based on stream type)
+            // YouTube: start with 2s buffer (can start faster, will buffer more during playback)
+            // Radio: start with 10s buffer for better stability
             // Recordings: start with 0.5s buffer since they're local
             const isRecording = /\/api\/recordings\/\d+\/file/.test(youtubeUrl || '');
-            const minInitialBuffer = isRecording ? 0.5 : (isYouTubeSource ? 2 : 2);
+            const isYouTube = isYouTubeSource;
+            const minInitialBuffer = isRecording ? 0.5 : (isYouTube ? 2 : 10);
             
-            // Also check if we have any data at all (readyState >= 2 means we have metadata and some data)
+            // Also check if we have any data at all (readyState >= 3 means we have enough data to play)
+            // For YouTube, be more lenient - allow playback with less buffer since it will buffer aggressively during playback
             const hasEnoughData = bufferedAhead >= minInitialBuffer || 
                                  audioPlayer.readyState >= 3 || 
-                                 (audioPlayer.readyState >= 2 && bufferedAhead > 0);
+                                 (isYouTube && audioPlayer.readyState >= 2 && bufferedAhead > 0.5) ||
+                                 (!isYouTube && audioPlayer.readyState >= 2 && bufferedAhead > 0);
             
             if (hasEnoughData) {
                 console.log(`▶️ Starting playback (buffer: ${bufferedAhead.toFixed(2)}s, readyState: ${audioPlayer.readyState})`);
@@ -1586,8 +1706,8 @@ function loadStream(youtubeUrl) {
                     if (!isLoading) return; // Stream was cancelled
                     
                     const currentBuffered = audioPlayer.buffered.length > 0 
-                        ? audioPlayer.buffered.end(audioPlayer.buffered.length - 1) - audioPlayer.currentTime 
-                        : 0;
+                            ? audioPlayer.buffered.end(audioPlayer.buffered.length - 1) - audioPlayer.currentTime 
+                            : 0;
                     
                     const canPlayNow = currentBuffered >= minInitialBuffer || 
                                       audioPlayer.readyState >= 3 ||
@@ -1595,19 +1715,19 @@ function loadStream(youtubeUrl) {
                     
                     if (canPlayNow) {
                         console.log(`▶️ Starting playback after ${checkCount * 0.5}s wait (buffer: ${currentBuffered.toFixed(2)}s)`);
-                        audioPlayer.play().then(() => {
+                            audioPlayer.play().then(() => {
                             console.log(`✅ Audio play started after buffering (buffer: ${currentBuffered.toFixed(2)}s)`);
-                            isLoading = false;
+                                isLoading = false;
                             loadingUrl = null;
-                            hasStartedPlayback = true;
-                            reconnectAttempts = 0;
-                            updatePlayPauseButton(true);
-                            cleanupLoad();
-                        }).catch(err => {
-                            console.error('❌ Play error after buffering:', err);
-                            isLoading = false;
+                                hasStartedPlayback = true;
+                                reconnectAttempts = 0;
+                                updatePlayPauseButton(true);
+                                cleanupLoad();
+                            }).catch(err => {
+                                console.error('❌ Play error after buffering:', err);
+                                isLoading = false;
                             loadingUrl = null;
-                            cleanupLoad();
+                                cleanupLoad();
                             
                             // If autoplay was blocked, enable manual play
                             if (err.name === 'NotAllowedError' || err.message.includes('play() request')) {
@@ -1619,7 +1739,7 @@ function loadStream(youtubeUrl) {
                     } else if (checkCount < maxChecks) {
                         // Keep checking
                         setTimeout(checkBuffer, 500);
-                    } else {
+                        } else {
                         // Give up waiting and try to play anyway if we have any data
                         if (audioPlayer.readyState >= 2 && currentBuffered > 0) {
                             console.log(`⚠️ Buffer timeout - attempting to play with ${currentBuffered.toFixed(2)}s buffer`);
@@ -1902,26 +2022,7 @@ function updatePlayPauseButton(isPlaying) {
     }
 }
 
-// Search functionality
-searchBtn.addEventListener('click', () => {
-    const query = searchQueryInput.value.trim();
-    if (!query) {
-        return;
-    }
-    
-    // Switch to search view - hide category sections and show search results
-    countriesSection.style.display = 'none';
-    genresSection.style.display = 'none';
-    stationsSection.style.display = 'none';
-    
-    // Clear active category button
-    categoryButtons.forEach(b => b.classList.remove('active'));
-    activeCategory = null;
-    
-    searchYouTube(query);
-});
-
-// Enter key support for search
+// Search functionality - Enter key support
 searchQueryInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
         const query = searchQueryInput.value.trim();
@@ -1976,7 +2077,164 @@ function getCountryFlag(countryCode) {
     }
 }
 
-// Load countries from API
+// Store all countries for alphabet filtering
+let allCountriesData = [];
+
+// Load countries with alphabet navigation
+async function loadCountriesWithAlphabet() {
+    countriesGrid.innerHTML = '<div class="loading-spinner"></div>';
+    countriesSection.style.display = 'block';
+    stationsSection.style.display = 'none';
+    
+    try {
+        const response = await fetch('/api/radio/countries');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!data || !data.countries) {
+            throw new Error('Invalid response format from server');
+        }
+        
+        allCountriesData = data.countries;
+        displayCountriesWithAlphabet(data.countries);
+    } catch (error) {
+        console.error('Error loading countries:', error);
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error';
+        errorDiv.textContent = `Failed to load countries: ${error.message}`;
+        countriesGrid.innerHTML = '';
+        countriesGrid.appendChild(errorDiv);
+    }
+}
+
+// Display countries with alphabet navigation
+function displayCountriesWithAlphabet(countries) {
+    // Clear existing content
+    countriesSection.innerHTML = '';
+    
+    // Create alphabet navigation
+    const alphabetNav = document.createElement('div');
+    alphabetNav.className = 'alphabet-nav';
+    
+    // Create A-Z buttons
+    for (let i = 65; i <= 90; i++) {
+        const letter = String.fromCharCode(i);
+        const letterBtn = document.createElement('button');
+        letterBtn.className = 'alphabet-btn';
+        letterBtn.textContent = letter;
+        letterBtn.setAttribute('data-letter', letter);
+        
+        letterBtn.addEventListener('click', () => {
+            // Remove active from all buttons
+            document.querySelectorAll('.alphabet-btn').forEach(btn => btn.classList.remove('active'));
+            // Add active to clicked button
+            letterBtn.classList.add('active');
+            // Filter countries by letter
+            filterCountriesByLetter(letter);
+        });
+        
+        alphabetNav.appendChild(letterBtn);
+    }
+    
+    // Create container for countries grid
+    const countriesContainer = document.createElement('div');
+    countriesContainer.id = 'countriesGrid';
+    countriesContainer.className = 'countries-grid';
+    countriesContainer.style.display = 'none'; // Hide initially
+    
+    // Create section header
+    const sectionHeader = document.createElement('div');
+    sectionHeader.className = 'section-header';
+    const headerTitle = document.createElement('h2');
+    headerTitle.textContent = 'Select a Country';
+    sectionHeader.appendChild(headerTitle);
+    
+    countriesSection.appendChild(sectionHeader);
+    countriesSection.appendChild(alphabetNav);
+    countriesSection.appendChild(countriesContainer);
+    
+    // Store countries for filtering
+    allCountriesData = countries;
+    
+    // Don't show countries initially - wait for letter selection
+}
+
+// Filter countries by letter
+function filterCountriesByLetter(letter) {
+    const countriesGrid = document.getElementById('countriesGrid');
+    if (!countriesGrid) return;
+    
+    const filtered = allCountriesData.filter(country => {
+        const countryName = String(country.name || '').trim().toUpperCase();
+        return countryName.startsWith(letter);
+    });
+    
+    // Show the countries grid when a letter is pressed
+    countriesGrid.style.display = 'grid';
+    
+    displayFilteredCountries(filtered);
+}
+
+// Display filtered countries
+function displayFilteredCountries(countries) {
+    const countriesGrid = document.getElementById('countriesGrid');
+    if (!countriesGrid) return;
+    
+    countriesGrid.innerHTML = '';
+    
+    if (!countries || countries.length === 0) {
+        countriesGrid.innerHTML = '<div class="error">No countries found</div>';
+        return;
+    }
+    
+    // Sort countries alphabetically
+    countries.sort((a, b) => {
+        const nameA = (a.name || '').toUpperCase();
+        const nameB = (b.name || '').toUpperCase();
+        return nameA.localeCompare(nameB);
+    });
+    
+    countries.forEach(country => {
+        try {
+            // Safely extract country code and name
+            const countryCode = String(country.iso_3166_1 || country.iso_3166_1_2 || '').trim();
+            const countryName = String(country.name || 'Unknown').trim();
+            
+            // Validate country code - must be exactly 2 characters
+            if (!countryCode || countryCode.length !== 2) {
+                console.warn('Skipping country with invalid code:', countryCode, countryName);
+                return; // Skip invalid country codes
+            }
+            
+            const countryItem = document.createElement('div');
+            countryItem.className = 'country-item';
+            
+            const flagDiv = document.createElement('div');
+            flagDiv.className = 'country-flag';
+            flagDiv.textContent = getCountryFlag(countryCode);
+            
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'country-name';
+            nameDiv.textContent = countryName;
+            
+            countryItem.appendChild(flagDiv);
+            countryItem.appendChild(nameDiv);
+            
+            countryItem.addEventListener('click', () => {
+                loadStationsForCountry(countryCode.toUpperCase(), countryName);
+            });
+            
+            countriesGrid.appendChild(countryItem);
+        } catch (error) {
+            console.error('Error displaying country:', country, error);
+        }
+    });
+}
+
+// Load countries from API (kept for backward compatibility)
 async function loadCountries() {
     countriesGrid.innerHTML = '<div class="loading-spinner"></div>';
     countriesSection.style.display = 'block';
@@ -2049,6 +2307,219 @@ function displayCountries(countries) {
             console.error('Error displaying country:', country, error);
         }
     });
+}
+
+// Load international stations grouped by country alphabetically
+async function loadInternationalStationsByCountry() {
+    if (!stationsList || !stationsSection) return;
+    
+    stationsSection.style.display = 'block';
+    stationsList.innerHTML = '<div class="loading-spinner">Loading international stations...</div>';
+    if (stationsHeader) {
+        stationsHeader.textContent = 'International Radio Stations';
+    }
+    
+    try {
+        // First, get list of countries
+        const countriesResponse = await fetch('/api/radio/countries');
+        if (!countriesResponse.ok) {
+            throw new Error('Failed to load countries');
+        }
+        
+        const countriesData = await countriesResponse.json();
+        const countries = countriesData.countries || [];
+        
+        // Sort countries alphabetically by name
+        countries.sort((a, b) => {
+            const nameA = (a.name || '').toUpperCase();
+            const nameB = (b.name || '').toUpperCase();
+            return nameA.localeCompare(nameB);
+        });
+        
+        // Group stations by country
+        const stationsByCountry = {};
+        const countryNames = {};
+        
+        // Fetch stations for each country (limit to top countries or all)
+        const topCountries = countries.slice(0, 50); // Limit to first 50 countries to avoid too many requests
+        
+        for (const country of topCountries) {
+            const countryCode = String(country.iso_3166_1 || country.iso_3166_1_2 || '').trim().toUpperCase();
+            const countryName = String(country.name || 'Unknown').trim();
+            
+            if (!countryCode || countryCode.length !== 2) {
+                continue;
+            }
+            
+            try {
+                const stationsResponse = await fetch(`/api/radio/stations/${countryCode}?limit=20`);
+                if (stationsResponse.ok) {
+                    const stationsData = await stationsResponse.json();
+                    const stations = stationsData.stations || [];
+                    
+                    if (stations.length > 0) {
+                        stationsByCountry[countryCode] = stations;
+                        countryNames[countryCode] = countryName;
+                    }
+                }
+            } catch (error) {
+                console.warn(`Failed to load stations for ${countryName}:`, error);
+            }
+        }
+        
+        // Display stations grouped by country
+        displayInternationalStationsByCountry(stationsByCountry, countryNames);
+        
+    } catch (error) {
+        console.error('Error loading international stations:', error);
+        stationsList.innerHTML = `<div class="error">Failed to load international stations: ${error.message}</div>`;
+    }
+}
+
+// Display international stations grouped by country alphabetically
+function displayInternationalStationsByCountry(stationsByCountry, countryNames) {
+    stationsList.innerHTML = '';
+    
+    if (!stationsByCountry || Object.keys(stationsByCountry).length === 0) {
+        stationsList.innerHTML = '<div class="error">No stations found</div>';
+        return;
+    }
+    
+    // Sort country codes alphabetically by country name
+    const sortedCountryCodes = Object.keys(stationsByCountry).sort((a, b) => {
+        const nameA = (countryNames[a] || '').toUpperCase();
+        const nameB = (countryNames[b] || '').toUpperCase();
+        return nameA.localeCompare(nameB);
+    });
+    
+    sortedCountryCodes.forEach(countryCode => {
+        const stations = stationsByCountry[countryCode];
+        const countryName = countryNames[countryCode];
+        
+        if (!stations || stations.length === 0) return;
+        
+        // Create country section header
+        const countrySection = document.createElement('div');
+        countrySection.className = 'country-station-section';
+        
+        const countryHeader = document.createElement('div');
+        countryHeader.className = 'country-station-header';
+        
+        const flagSpan = document.createElement('span');
+        flagSpan.className = 'country-station-flag';
+        flagSpan.textContent = getCountryFlag(countryCode);
+        
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'country-station-name';
+        nameSpan.textContent = countryName;
+        
+        countryHeader.appendChild(flagSpan);
+        countryHeader.appendChild(nameSpan);
+        countrySection.appendChild(countryHeader);
+        
+        // Create stations grid for this country
+        const stationsGrid = document.createElement('div');
+        stationsGrid.className = 'stations-list country-stations-grid';
+        
+        stations.forEach(station => {
+            try {
+                const stationItem = createStationItem(station);
+                stationsGrid.appendChild(stationItem);
+            } catch (error) {
+                console.warn('Error displaying station:', station, error);
+            }
+        });
+        
+        countrySection.appendChild(stationsGrid);
+        stationsList.appendChild(countrySection);
+    });
+}
+
+// Helper function to create a station item (extracted from displayStations)
+function createStationItem(station) {
+    const stationItem = document.createElement('div');
+    stationItem.className = 'station-item';
+    
+    // Create logo container
+    const logoContainer = document.createElement('div');
+    logoContainer.className = 'station-logo';
+    
+    // Try to use station logo/favicon if available
+    const logoUrl = station.favicon || station.logo || station.favicon_url;
+    if (logoUrl && isValidImageUrl(logoUrl)) {
+        // Create emoji span as placeholder
+        const emojiSpan = document.createElement('span');
+        emojiSpan.textContent = '📻';
+        emojiSpan.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 1.5em;';
+        logoContainer.appendChild(emojiSpan);
+        
+        const logoImg = document.createElement('img');
+        logoImg.src = logoUrl;
+        logoImg.alt = station.name || 'Radio Station';
+        logoImg.style.cssText = 'width: 100%; height: 100%; object-fit: contain; position: absolute; top: 0; left: 0; opacity: 0; transition: opacity 0.2s; border-radius: 10px; padding: 4px; box-sizing: border-box;';
+        logoImg.loading = 'lazy';
+        
+        logoImg.onload = function() {
+            logoImg.style.opacity = '1';
+            emojiSpan.style.display = 'none';
+        };
+        
+        logoImg.onerror = function() {
+            this.remove();
+        };
+        
+        logoContainer.appendChild(logoImg);
+    } else {
+        logoContainer.textContent = '📻';
+    }
+    
+    // Create station info
+    const stationInfo = document.createElement('div');
+    stationInfo.className = 'station-info';
+    
+    const stationName = document.createElement('div');
+    stationName.className = 'station-name';
+    stationName.textContent = station.name || 'Unknown Station';
+    
+    const stationGenre = document.createElement('div');
+    stationGenre.className = 'station-genre';
+    stationGenre.textContent = station.tags || station.genre || 'Radio';
+    
+    stationInfo.appendChild(stationName);
+    stationInfo.appendChild(stationGenre);
+    
+    stationItem.appendChild(logoContainer);
+    stationItem.appendChild(stationInfo);
+    
+    // Add heart button if user is logged in
+    if (currentUser) {
+        const itemId = station.stationuuid || station.url_resolved || station.url || station.name;
+        checkIfFavorite('station', itemId).then(isFav => {
+            const heartBtn = createHeartButton('station', itemId, isFav);
+            stationItem.style.position = 'relative';
+            stationItem.appendChild(heartBtn);
+            heartBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const category = currentGenre ? 'music' : 'international';
+                await toggleFavorite(
+                    heartBtn, 
+                    'station', 
+                    itemId, 
+                    station.name, 
+                    station.url_resolved || station.url, 
+                    category, 
+                    station.favicon || station.logo, 
+                    station
+                );
+            });
+        });
+    }
+    
+    stationItem.addEventListener('click', () => {
+        playRadioStation(station);
+    });
+    
+    return stationItem;
 }
 
 // Load stations for a country
@@ -2152,7 +2623,7 @@ function displayStations(stations) {
                 const logoImg = document.createElement('img');
                 logoImg.src = logoUrl;
                 logoImg.alt = station.name || 'Radio Station';
-                logoImg.style.cssText = 'width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; opacity: 0; transition: opacity 0.2s;';
+                logoImg.style.cssText = 'width: 100%; height: 100%; object-fit: contain; position: absolute; top: 0; left: 0; opacity: 0; transition: opacity 0.2s; border-radius: 10px; padding: 4px; box-sizing: border-box;';
                 logoImg.loading = 'lazy';
                 
                 logoImg.onload = function() {
@@ -2254,60 +2725,82 @@ function showCategoryStations(category) {
     displayCategoryStations(stations, category);
 }
 
-// Display category stations in search results
+// Display category stations in search results as grid
 function displayCategoryStations(stations, category) {
-    // Ensure search results container is visible
-    if (searchResults) {
-        searchResults.style.display = '';
+    // Use stations section for grid display
+    if (stationsList && stationsSection) {
+        stationsSection.style.display = 'block';
+        stationsList.innerHTML = '';
+        // Update header
+        if (stationsHeader) {
+            const categoryNames = {
+                'news': 'News Stations',
+                'live-sports': 'Sports Stations',
+                'audiobooks': 'Audiobook Stations',
+                'podcasts': 'Podcast Stations'
+            };
+            stationsHeader.textContent = categoryNames[category] || 'Radio Stations';
+        }
+    } else if (searchResults) {
+        // Fallback to search results with grid layout
+        searchResults.style.display = 'grid';
+        searchResults.className = 'search-results stations-list';
     }
     
     // Build all station cards first in a document fragment to avoid flickering
     const fragment = document.createDocumentFragment();
     
     stations.forEach(station => {
-        const stationCard = document.createElement('div');
-        // Use result-item class instead of skeleton-item to avoid loading animation
-        stationCard.className = 'result-item';
-        stationCard.style.cursor = 'pointer';
+        const stationItem = document.createElement('div');
+        stationItem.className = 'station-item';
+        stationItem.style.cursor = 'pointer';
         
-        // Create logo element - try to use logo if available, otherwise use emoji
+        // Create logo container
         const logoContainer = document.createElement('div');
-        logoContainer.style.cssText = 'width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; font-size: 2.5em; flex-shrink: 0;';
+        logoContainer.className = 'station-logo';
         
-        if (station.logo) {
+        if (station.logo || station.favicon) {
             const logoImg = document.createElement('img');
-            logoImg.src = station.logo;
+            logoImg.src = station.logo || station.favicon;
             logoImg.alt = station.name;
-            logoImg.style.cssText = 'width: 60px; height: 60px; border-radius: 8px; object-fit: cover; background: #2a3a3f;';
             logoImg.onerror = function() {
                 this.style.display = 'none';
-                logoContainer.innerHTML = '📻';
+                logoContainer.textContent = '📻';
             };
             logoContainer.appendChild(logoImg);
         } else {
-            logoContainer.innerHTML = '📻';
+            logoContainer.textContent = '📻';
         }
         
-        // Build card content with inline styles to match design
-        stationCard.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 15px;">
-                <div style="flex: 1;">
-                    <div style="color: #ffffff; font-size: 1em; font-weight: 500; margin-bottom: 5px;">${station.name}</div>
-                    <div style="color: #b3b3b3; font-size: 0.85em;">${station.country || ''} ${station.genre ? '• ' + station.genre : ''}</div>
-                </div>
-            </div>
-        `;
+        // Create station info container
+        const stationInfo = document.createElement('div');
+        stationInfo.className = 'station-info';
         
-        // Insert logo container at the beginning
-        const innerDiv = stationCard.querySelector('div');
-        innerDiv.insertBefore(logoContainer, innerDiv.firstChild);
+        // Station name
+        const stationName = document.createElement('div');
+        stationName.className = 'station-name';
+        stationName.textContent = station.name || 'Unknown Station';
+        
+        // Station country/genre
+        const stationCountry = document.createElement('div');
+        stationCountry.className = 'station-country';
+        const countryText = station.country || '';
+        const genreText = station.genre || station.tags || '';
+        stationCountry.textContent = countryText + (countryText && genreText ? ' • ' : '') + genreText;
+        
+        stationInfo.appendChild(stationName);
+        stationInfo.appendChild(stationCountry);
+        
+        stationItem.appendChild(logoContainer);
+        stationItem.appendChild(stationInfo);
         
         // Add heart button if user is logged in
         if (currentUser) {
             const itemId = station.url || station.stationuuid || station.name;
             checkIfFavorite('station', itemId).then(isFav => {
                 const heartBtn = createHeartButton('station', itemId, isFav);
-                stationCard.appendChild(heartBtn);
+                stationItem.style.position = 'relative';
+                stationItem.appendChild(heartBtn);
                 heartBtn.addEventListener('click', async (e) => {
                     e.stopPropagation();
                     await toggleFavorite(heartBtn, 'station', itemId, station.name, station.url || station.url_resolved, category, station.logo || station.favicon, station);
@@ -2315,26 +2808,20 @@ function displayCategoryStations(stations, category) {
             });
         }
         
-        stationCard.addEventListener('click', () => {
+        stationItem.addEventListener('click', () => {
             playCategoryStation(station);
         });
         
-        stationCard.addEventListener('mouseenter', () => {
-            stationCard.style.transform = 'translateX(5px)';
-            stationCard.style.backgroundColor = '#2a3a3f';
-        });
-        
-        stationCard.addEventListener('mouseleave', () => {
-            stationCard.style.transform = 'translateX(0)';
-            stationCard.style.backgroundColor = '';
-        });
-        
-        fragment.appendChild(stationCard);
+        fragment.appendChild(stationItem);
     });
     
     // Replace content all at once to avoid flickering
-    searchResults.innerHTML = '';
-    searchResults.appendChild(fragment);
+    if (stationsList) {
+        stationsList.appendChild(fragment);
+    } else if (searchResults) {
+        searchResults.innerHTML = '';
+        searchResults.appendChild(fragment);
+    }
 }
 
 // Play radio station from category
@@ -2460,6 +2947,12 @@ categoryButtons.forEach(btn => {
     btn.addEventListener('click', () => {
         const category = btn.getAttribute('data-category');
         
+        // Close menu after category selection
+        if (hamburgerBtn && menuDropdown) {
+            hamburgerBtn.classList.remove('active');
+            menuDropdown.classList.remove('active');
+        }
+        
         // Handle international category separately
         if (category === 'international') {
             // Toggle active state
@@ -2483,8 +2976,8 @@ categoryButtons.forEach(btn => {
                 genresSection.style.display = 'none';
                 stationsSection.style.display = 'none';
                 
-                // Load countries
-                loadCountries();
+                // Load countries with alphabet navigation
+                loadCountriesWithAlphabet();
             }
             return;
         }
@@ -2572,9 +3065,9 @@ categoryButtons.forEach(btn => {
             // Hide radio sections
             countriesSection.style.display = 'none';
             genresSection.style.display = 'none';
-            stationsSection.style.display = 'none';
+            searchResults.innerHTML = '';
             
-            // Show stations for this category
+            // Show stations for this category in stations section
             showCategoryStations(category);
         }
     });
@@ -2609,19 +3102,17 @@ function loadMusicGenres() {
     stationsSection.style.display = 'none';
     countriesSection.style.display = 'none';
     
-    musicGenres.forEach(genre => {
+    musicGenres.forEach((genre, index) => {
         const genreItem = document.createElement('div');
         genreItem.className = 'country-item';
         
-        const iconDiv = document.createElement('div');
-        iconDiv.className = 'country-flag';
-        iconDiv.textContent = genre.icon;
+        // All subcategories are size-small
+        genreItem.classList.add('size-small');
         
         const nameDiv = document.createElement('div');
         nameDiv.className = 'country-name';
         nameDiv.textContent = genre.name;
         
-        genreItem.appendChild(iconDiv);
         genreItem.appendChild(nameDiv);
         
         genreItem.addEventListener('click', () => {
@@ -2638,12 +3129,12 @@ async function loadStationsForGenre(genreTag, genreName) {
     
     currentGenre = genreTag;
     stationsList.innerHTML = '<div class="loading-spinner"></div>';
-    genresSection.style.display = 'none';
+    genresSection.style.display = 'block';
     stationsSection.style.display = 'block';
     countriesSection.style.display = 'none';
-    stationsHeader.textContent = `${genreName} Radio Stations`;
+    if (stationsHeader) stationsHeader.textContent = '';
     
-    if (backToGenresBtn) backToGenresBtn.style.display = 'block';
+    if (backToGenresBtn) backToGenresBtn.style.display = 'none';
     if (backToCountriesBtn) backToCountriesBtn.style.display = 'none';
     
     try {
@@ -3168,6 +3659,26 @@ if (customProgressBar) {
             progressThumb.style.left = percent + '%';
         }
         
+        // Update buffered portion on progress-track when seeking
+        if (progressTrack && audioPlayer.buffered.length > 0) {
+            const duration = audioPlayer.duration || (currentVideoDuration ? parseInt(currentVideoDuration) : null);
+            if (duration && duration > 0) {
+                const seekTime = (percent / 100) * duration;
+                const bufferedEnd = audioPlayer.buffered.end(audioPlayer.buffered.length - 1);
+                const bufferedAhead = bufferedEnd - seekTime;
+                if (bufferedAhead > 0) {
+                    const bufferedPercent = (bufferedEnd / duration) * 100;
+                    // Set background gradient to show buffered portion (dark grey) on progress-track
+                    progressTrack.style.backgroundImage = 
+                        `linear-gradient(to right, #1a2a2f 0%, #1a2a2f ${percent}%, #555555 ${percent}%, #555555 ${bufferedPercent}%, #1a2a2f ${bufferedPercent}%, #1a2a2f 100%)`;
+                } else {
+                    // No buffered ahead, reset to solid background
+                    progressTrack.style.backgroundImage = 'none';
+                    progressTrack.style.background = '#1a2a2f';
+                }
+            }
+        }
+        
         // Update time display
         const duration = audioPlayer.duration || (currentVideoDuration ? parseInt(currentVideoDuration) : null);
         if (duration && !isNaN(duration) && isFinite(duration) && duration > 0) {
@@ -3280,6 +3791,30 @@ if (hamburgerBtn && menuDropdown) {
         hamburgerBtn.classList.toggle('active');
         menuDropdown.classList.toggle('active');
     });
+
+    // Search icon button handler
+    if (searchIconBtn && searchSection) {
+        searchIconBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // Toggle search section visibility
+            if (searchSection.style.display === 'none' || !searchSection.style.display) {
+                searchSection.style.display = 'block';
+                // Focus on search input when opened
+                setTimeout(() => {
+                    searchQueryInput.focus();
+                }, 50);
+            } else {
+                searchSection.style.display = 'none';
+            }
+        });
+
+        // Close search when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!searchIconBtn.contains(e.target) && !searchSection.contains(e.target)) {
+                searchSection.style.display = 'none';
+            }
+        });
+    }
 
     // Close menu when clicking outside
     document.addEventListener('click', (e) => {

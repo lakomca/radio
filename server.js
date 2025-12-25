@@ -780,12 +780,6 @@ app.get('/radio-stream', (req, res) => {
     const ffmpegArgs = [
         '-user_agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         '-headers', 'Referer: https://www.youtube.com/\r\nOrigin: https://www.youtube.com\r\n',
-        '-i', sourceUrl,
-        '-f', 'adts',
-        '-acodec', 'aac',
-        '-b:a', '128k',  // Audio bitrate
-        '-ar', '44100',
-        '-ac', '2',
         '-reconnect', '1',
         '-reconnect_at_eof', '1',
         '-reconnect_streamed', '1',
@@ -793,7 +787,16 @@ app.get('/radio-stream', (req, res) => {
         '-reconnect_on_network_error', '1',
         '-timeout', '86400000000',  // 24 hours in microseconds (no timeout)
         '-rw_timeout', '86400000000',  // 24 hours read/write timeout (no timeout)
-        '-fflags', '+genpts+flush_packets',  // Generate PTS and flush packets for progressive streaming
+        '-analyzeduration', '2147483647',  // Maximum analysis duration (avoid premature EOF)
+        '-probesize', '2147483647',  // Maximum probe size (avoid premature EOF)
+        '-fflags', '+genpts+flush_packets+discardcorrupt',  // Generate PTS, flush packets, and discard corrupt packets
+        '-use_wallclock_as_timestamps', '1',  // Use wallclock timestamps for live streams (input option)
+        '-i', sourceUrl,
+        '-f', 'adts',
+        '-acodec', 'aac',
+        '-b:a', '128k',  // Audio bitrate
+        '-ar', '44100',
+        '-ac', '2',
         '-avoid_negative_ts', 'make_zero',
         '-flush_packets', '1',  // Flush packets immediately
         '-'
@@ -803,7 +806,24 @@ app.get('/radio-stream', (req, res) => {
 
     const CHUNK_SIZE = 64 * 1024; // 64KB chunks for progressive streaming
 
+    // Track stream start time and data flow for debugging
+    const streamStartTime = Date.now();
+    let lastDataTime = Date.now();
+    let bytesWritten = 0;
+
+    // Monitor for stream stalls - if no data for 30 seconds, log warning
+    const stallMonitor = setInterval(() => {
+        const timeSinceLastData = Date.now() - lastDataTime;
+        const streamDuration = (Date.now() - streamStartTime) / 1000;
+        if (timeSinceLastData > 30000 && streamDuration > 60) {
+            console.warn(`⚠️ Stream may have stalled: no data for ${Math.floor(timeSinceLastData / 1000)}s, total stream duration: ${Math.floor(streamDuration)}s, bytes written: ${bytesWritten}`);
+        }
+    }, 10000); // Check every 10 seconds
+
     ffmpeg.stdout.on('data', (chunk) => {
+        lastDataTime = Date.now();
+        bytesWritten += chunk.length;
+        
         if (!res.destroyed) {
             try {
                 // Process in smaller chunks for better progressive streaming
@@ -866,13 +886,15 @@ app.get('/radio-stream', (req, res) => {
     });
 
     ffmpeg.on('close', (code) => {
-        console.log(`FFmpeg radio-stream exited with code ${code}`);
+        clearInterval(stallMonitor);
+        const streamDuration = (Date.now() - streamStartTime) / 1000;
+        console.log(`FFmpeg radio-stream exited with code ${code} after ${Math.floor(streamDuration)}s (${Math.floor(streamDuration / 60)}m ${Math.floor(streamDuration % 60)}s), bytes written: ${bytesWritten}`);
         
         // If stream failed to start, send error response
         if (code !== 0 && code !== 1 && !hasError && !res.headersSent) {
             res.status(500).json({ 
                 error: 'Stream processing failed', 
-                details: `FFmpeg exited with code ${code}`,
+                details: `FFmpeg exited with code ${code} after ${Math.floor(streamDuration)}s`,
                 hint: 'The stream may be unavailable or in an unsupported format'
             });
         } else if (!res.destroyed) {
