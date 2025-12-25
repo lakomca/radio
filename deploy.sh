@@ -58,3 +58,4 @@ echo "3. Update firebase.json if your Cloud Run URL changed"
 
 
 
+
