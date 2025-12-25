@@ -10,6 +10,9 @@ const db = require('./database');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Timeout constants - 24 hours in milliseconds for very long-running connections
+const INFINITE_TIMEOUT = 24 * 60 * 60 * 1000; // 86,400,000 ms
+
 // CORS configuration
 app.use(cors({
     origin: true,
