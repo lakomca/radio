@@ -1797,29 +1797,34 @@ console.log(`✅ index.html found at: ${indexPath}`);
 
 
 const server = app.listen(PORT, '0.0.0.0', () => {
-    const os = require('os');
-    const networkInterfaces = os.networkInterfaces();
-    let localIP = 'localhost';
-    
-    // Find local IP address
-    for (const interfaceName in networkInterfaces) {
-        const addresses = networkInterfaces[interfaceName];
-        for (const address of addresses) {
-            if (address.family === 'IPv4' && !address.internal) {
-                localIP = address.address;
-                break;
-            }
-        }
-        if (localIP !== 'localhost') break;
-    }
-    
     console.log(`\n✅ Radio server running!`);
     console.log(`   Port:     ${PORT}`);
-    console.log(`   Local:    http://localhost:${PORT}`);
-    console.log(`   Network:  http://${localIP}:${PORT}`);
-    console.log(`\n📱 Access from other devices on the same Wi-Fi:`);
-    console.log(`   http://${localIP}:${PORT}`);
-    console.log(`\n⚠️  Make sure Windows Firewall allows Node.js on port ${PORT}`);
+    console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+    
+    // Only show network info in development
+    if (process.env.NODE_ENV !== 'production') {
+        const os = require('os');
+        const networkInterfaces = os.networkInterfaces();
+        let localIP = 'localhost';
+        
+        // Find local IP address
+        for (const interfaceName in networkInterfaces) {
+            const addresses = networkInterfaces[interfaceName];
+            for (const address of addresses) {
+                if (address.family === 'IPv4' && !address.internal) {
+                    localIP = address.address;
+                    break;
+                }
+            }
+            if (localIP !== 'localhost') break;
+        }
+        
+        console.log(`   Local:    http://localhost:${PORT}`);
+        console.log(`   Network:  http://${localIP}:${PORT}`);
+        console.log(`\n📱 Access from other devices on the same Wi-Fi:`);
+        console.log(`   http://${localIP}:${PORT}`);
+        console.log(`\n⚠️  Make sure Windows Firewall allows Node.js on port ${PORT}`);
+    }
     console.log(`   Make sure ffmpeg and yt-dlp are installed and in your PATH\n`);
 }).on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
