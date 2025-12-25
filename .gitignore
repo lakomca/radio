@@ -21,3 +21,5 @@ ffplay.exe
 ffprobe.exe
 yt-dlp.exe
 
+.venv/
+public/Untitled
