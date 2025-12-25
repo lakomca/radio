@@ -42,6 +42,11 @@ app.get('/radio-stations.json', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'radio-stations.json'));
 });
 
+// Health check endpoint for Railway
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // Explicit root route to serve index.html
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -1829,7 +1834,26 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 
 // Disable HTTP server timeouts to prevent 15-minute cutoffs
 // Use very large values (24 hours in milliseconds) instead of 0
-server.timeout = INFINITE_TIMEOUT;  // Very long timeout for HTTP server
-server.keepAliveTimeout = INFINITE_TIMEOUT;  // Very long keep-alive timeout
-server.headersTimeout = INFINITE_TIMEOUT;  // Very long headers timeout
+if (server) {
+    server.timeout = INFINITE_TIMEOUT;  // Very long timeout for HTTP server
+    server.keepAliveTimeout = INFINITE_TIMEOUT;  // Very long keep-alive timeout
+    server.headersTimeout = INFINITE_TIMEOUT;  // Very long headers timeout
+}
+
+// Handle uncaught errors gracefully
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+    // Don't exit in production, let Railway handle restarts
+    if (process.env.NODE_ENV !== 'production') {
+        process.exit(1);
+    }
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    // Don't exit in production, let Railway handle restarts
+    if (process.env.NODE_ENV !== 'production') {
+        process.exit(1);
+    }
+});
 
