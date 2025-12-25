@@ -1191,6 +1191,15 @@ function loadStream(youtubeUrl) {
     // Prevent loading the same URL that's already being loaded
     if (loadingUrl === youtubeUrl || (currentStreamUrl && currentStreamUrl.includes(encodeURIComponent(youtubeUrl)))) {
         console.log('⚠️ Same URL already loading, ignoring duplicate request for:', youtubeUrl);
+        // If it's already loading and paused, try to play it
+        if (audioPlayer.paused && !isLoading) {
+            console.log('🔄 Resuming already loaded stream');
+            audioPlayer.play().then(() => {
+                updatePlayPauseButton(true);
+            }).catch(err => {
+                console.error('Error resuming stream:', err);
+            });
+        }
         return;
     }
     
@@ -1528,9 +1537,11 @@ function loadStream(youtubeUrl) {
             const bufferedAhead = bufferedEnd - audioPlayer.currentTime;
             
             // Reduced buffer requirement for faster playback start
-            // YouTube: start with 3s buffer (reduced from 8s) for faster response
+            // YouTube: start with 2s buffer for faster response
             // Radio: start with 2s buffer
-            const minInitialBuffer = isYouTubeSource ? 3 : 2;
+            // Recordings: start with 0.5s buffer since they're local
+            const isRecording = /\/api\/recordings\/\d+\/file/.test(youtubeUrl || '');
+            const minInitialBuffer = isRecording ? 0.5 : (isYouTubeSource ? 2 : 2);
             
             // Also check if we have any data at all (readyState >= 2 means we have metadata and some data)
             const hasEnoughData = bufferedAhead >= minInitialBuffer || 
@@ -2845,7 +2856,12 @@ function loadMoreVideos() {
                 totalTimeDisplay.textContent = formatTime(parseInt(currentVideoDuration));
             }
             
-            // Load the stream
+            // Ensure volume is set before loading
+            if (audioPlayer.volume === 0) {
+                audioPlayer.volume = volumeSlider ? volumeSlider.value / 100 : 0.7;
+            }
+            
+            // Load and play the stream
             loadStream(video.url);
             
             return false;

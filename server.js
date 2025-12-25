@@ -17,10 +17,12 @@ app.use(cors({
 }));
 
 // Session configuration
+// Note: saveUninitialized: false means sessions are only created for authenticated users
+// This prevents session creation for public endpoints like /stream and /radio-stream
 app.use(session({
     secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
     resave: false,
-    saveUninitialized: false,
+    saveUninitialized: false,  // Don't create sessions for unauthenticated requests
     cookie: {
         secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
@@ -426,86 +428,42 @@ function searchYouTube(query) {
 // Store active streams
 const activeStreams = new Map();
 
-// Stream queue system to prevent skipping
-const streamQueue = [];
-let isProcessingQueue = false;
-const STREAM_TIMEOUT = 30 * 60 * 1000; // 30 minutes in milliseconds
-const activeStreamRequests = new Map(); // Track active requests by URL to prevent duplicates
-
-// Maximum concurrent streams to prevent memory issues
-const MAX_CONCURRENT_STREAMS = 5; // Limit concurrent FFmpeg processes
-let activeStreamCount = 0; // Track number of active streams
-
-// CORS middleware
+// CORS middleware - ensure streaming endpoints are accessible
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-Origin, Content-Type, Accept');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
+    
     next();
 });
 
-// Process stream queue
-async function processStreamQueue() {
-    if (isProcessingQueue || streamQueue.length === 0) {
-        return;
+// Set very long timeouts for streaming endpoints (before routes are defined)
+const INFINITE_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+app.use('/stream', (req, res, next) => {
+    req.setTimeout(INFINITE_TIMEOUT);
+    res.setTimeout(INFINITE_TIMEOUT);
+    if (req.socket) {
+        req.socket.setTimeout(INFINITE_TIMEOUT);
+        req.socket.setKeepAlive(true);
     }
-    
-    isProcessingQueue = true;
-    
-    while (streamQueue.length > 0) {
-        // Check if we've reached the maximum concurrent streams
-        if (activeStreamCount >= MAX_CONCURRENT_STREAMS) {
-            console.warn(`Queue processing paused - max concurrent streams reached (${activeStreamCount}/${MAX_CONCURRENT_STREAMS})`);
-            // Wait a bit and check again
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            continue;
-        }
-        
-        const { req, res, youtubeUrl } = streamQueue.shift();
-        
-        // Check if client is still connected
-        if (res.destroyed || res.headersSent) {
-            console.log('Skipping queue item - client disconnected or already responded');
-            continue;
-        }
-        
-        // Check if we're already processing this URL
-        if (activeStreamRequests.has(youtubeUrl)) {
-            console.log(`Skipping duplicate request for: ${youtubeUrl}`);
-            // Send a response indicating the stream is already being processed
-            if (!res.headersSent) {
-                res.status(409).json({ 
-                    error: 'Stream already being processed', 
-                    details: 'A stream for this URL is already in progress. Please wait.',
-                    hint: 'If the stream doesn\'t start, try again in a moment.'
-                });
-            }
-            continue;
-        }
-        
-        // Mark this URL as being processed
-        activeStreamRequests.set(youtubeUrl, { req, res, startTime: Date.now() });
-        
-        try {
-            await processStreamRequest(req, res, youtubeUrl);
-        } catch (error) {
-            console.error('Error processing stream from queue:', error);
-            if (!res.headersSent) {
-                res.status(500).json({ 
-                    error: 'Stream processing failed', 
-                    details: error.message 
-                });
-            }
-        } finally {
-            // Remove from active requests after processing completes or fails
-            activeStreamRequests.delete(youtubeUrl);
-        }
-        
-        // Small delay between queue items to prevent overwhelming the system
-        await new Promise(resolve => setTimeout(resolve, 100));
+    next();
+});
+
+app.use('/radio-stream', (req, res, next) => {
+    req.setTimeout(INFINITE_TIMEOUT);
+    res.setTimeout(INFINITE_TIMEOUT);
+    if (req.socket) {
+        req.socket.setTimeout(INFINITE_TIMEOUT);
+        req.socket.setKeepAlive(true);
     }
-    
-    isProcessingQueue = false;
-}
+    next();
+});
 
 // Process a single stream request
 async function processStreamRequest(req, res, youtubeUrl) {
@@ -568,8 +526,8 @@ async function processStreamRequest(req, res, youtubeUrl) {
                 '-reconnect_streamed', '1',
                 '-reconnect_delay_max', '30',  // Increased to 30 seconds for better reconnection
                 '-reconnect_on_network_error', '1',
-                '-timeout', '1800000000',  // 30 minutes timeout in microseconds (30 * 60 * 1000 * 1000)
-                '-rw_timeout', '1800000000',  // 30 minutes read/write timeout
+                '-timeout', '86400000000',  // 24 hours in microseconds (no timeout)
+                '-rw_timeout', '86400000000',  // 24 hours read/write timeout (no timeout)
                 '-fflags', '+genpts+flush_packets',  // Generate PTS and flush packets for progressive streaming
                 '-avoid_negative_ts', 'make_zero',  // Prevent timestamp issues
                 '-flush_packets', '1',  // Flush packets immediately for progressive streaming
@@ -581,25 +539,6 @@ async function processStreamRequest(req, res, youtubeUrl) {
                 shell: false,
                 stdio: ['ignore', 'pipe', 'pipe']
             });
-
-            // Set timeout for FFmpeg process (30 minutes)
-            const processTimeout = setTimeout(() => {
-                console.log('FFmpeg process timeout (30 minutes) - killing process');
-                try {
-                    ffmpeg.kill();
-                } catch (err) {
-                    console.error('Error killing ffmpeg on timeout:', err);
-                }
-                if (!res.headersSent) {
-                    res.status(500).json({ 
-                        error: 'Stream timeout', 
-                        details: 'Stream processing exceeded 30 minute timeout'
-                    });
-                } else {
-                    res.end();
-                }
-                reject(new Error('Process timeout'));
-            }, STREAM_TIMEOUT);
 
             let firstChunk = true;
             let hasError = false;
@@ -622,7 +561,6 @@ async function processStreamRequest(req, res, youtubeUrl) {
                         }
                     }
                     hasError = true;
-                    clearTimeout(processTimeout);
                     if (!res.headersSent) {
                         res.status(500).json({ 
                             error: 'Stream URL expired or video unavailable', 
@@ -637,7 +575,6 @@ async function processStreamRequest(req, res, youtubeUrl) {
                     console.error(`FFmpeg error: 403 Forbidden - Video may be restricted`);
                     console.error(`Full error: ${msg}`);
                     hasError = true;
-                    clearTimeout(processTimeout);
                     if (!res.headersSent) {
                         res.status(500).json({ 
                             error: 'Video access forbidden', 
@@ -651,7 +588,6 @@ async function processStreamRequest(req, res, youtubeUrl) {
                 } else if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('failed') || msg.toLowerCase().includes('http error')) {
                     console.error(`FFmpeg error: ${msg}`);
                     hasError = true;
-                    clearTimeout(processTimeout);
                     if (!res.headersSent) {
                         res.status(500).json({ 
                             error: 'FFmpeg streaming error', 
@@ -668,7 +604,6 @@ async function processStreamRequest(req, res, youtubeUrl) {
             ffmpeg.on('error', (error) => {
                 console.error('FFmpeg spawn error:', error);
                 hasError = true;
-                clearTimeout(processTimeout);
                 if (!res.headersSent) {
                     res.status(500).json({ error: 'FFmpeg not found. Please install ffmpeg and add it to PATH.' });
                 } else {
@@ -716,15 +651,6 @@ async function processStreamRequest(req, res, youtubeUrl) {
 
             // Handle stream end
             ffmpeg.on('close', (code) => {
-                clearTimeout(processTimeout);
-                
-                // If the client disconnected (common when switching tracks), ffmpeg will be killed and may exit non-zero.
-                if (clientDisconnected) {
-                    console.log(`FFmpeg exited with code ${code} (client disconnected)`);
-                    // Don't resolve/reject here - already resolved when stream started
-                    return;
-                }
-                
                 console.log(`FFmpeg process exited with code ${code}, bytes written: ${bytesWritten}`);
                 
                 // Code 0 is normal exit, code 1 might be error but could also be end of stream
@@ -773,65 +699,6 @@ async function processStreamRequest(req, res, youtubeUrl) {
                     res.end();
                 }
             });
-
-            // Handle client disconnect
-            let clientDisconnected = false;
-            req.on('close', () => {
-                clientDisconnected = true;
-                clearTimeout(processTimeout);
-                console.log('Client disconnected - stopping ffmpeg');
-                try {
-                    // Try graceful shutdown first, then force kill
-                    ffmpeg.kill('SIGTERM');
-                    setTimeout(() => {
-                        if (!ffmpeg.killed) {
-                            ffmpeg.kill('SIGKILL');
-                        }
-                    }, 2000);
-                } catch (err) {
-                    console.error('Error killing ffmpeg:', err);
-                }
-                // Don't resolve/reject here - already resolved when stream started
-            });
-            
-            // Also handle abort
-            req.on('aborted', () => {
-                clientDisconnected = true;
-                clearTimeout(processTimeout);
-                console.log('Client aborted connection');
-                try {
-                    // Try graceful shutdown first, then force kill
-                    ffmpeg.kill('SIGTERM');
-                    setTimeout(() => {
-                        if (!ffmpeg.killed) {
-                            ffmpeg.kill('SIGKILL');
-                        }
-                    }, 2000);
-                } catch (err) {
-                    console.error('Error killing ffmpeg on abort:', err);
-                }
-                // Don't resolve/reject here - already resolved when stream started
-            });
-
-            // Increment active stream count
-            activeStreamCount++;
-            console.log(`YouTube stream started (${activeStreamCount}/${MAX_CONCURRENT_STREAMS} active)`);
-            
-            // Store stream reference
-            const streamId = `youtube-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-            activeStreams.set(streamId, { ffmpeg, res, timeout: processTimeout, type: 'youtube' });
-            
-            // Clean up stream reference when done
-            const cleanup = () => {
-                if (activeStreams.has(streamId)) {
-                    activeStreams.delete(streamId);
-                    activeStreamCount = Math.max(0, activeStreamCount - 1);
-                    console.log(`YouTube stream cleaned up (${activeStreamCount}/${MAX_CONCURRENT_STREAMS} active)`);
-                }
-            };
-            req.on('close', cleanup);
-            req.on('aborted', cleanup);
-            ffmpeg.on('close', cleanup);
         }).catch(error => {
             console.error('Error getting audio URL:', error);
             console.error('Error stack:', error.stack);
@@ -861,32 +728,44 @@ app.get('/stream', (req, res) => {
         return res.status(400).json({ error: 'YouTube URL is required' });
     }
 
-    // Add to queue
-    streamQueue.push({ req, res, youtubeUrl });
-    console.log(`Stream request queued. Queue length: ${streamQueue.length}`);
-    
-    // Process queue
-    processStreamQueue();
+    // Disable timeouts for streaming connections (use very large value)
+    const INFINITE_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
+    req.setTimeout(INFINITE_TIMEOUT);
+    res.setTimeout(INFINITE_TIMEOUT);
+    if (req.socket) {
+        req.socket.setTimeout(INFINITE_TIMEOUT);
+        req.socket.setKeepAlive(true);
+    }
+
+    // Process stream directly
+    processStreamRequest(req, res, youtubeUrl).catch(error => {
+        console.error('Error processing stream request:', error);
+        if (!res.headersSent) {
+            res.status(500).json({ 
+                error: 'Stream processing failed', 
+                details: error.message 
+            });
+        }
+    });
 });
 
 // Endpoint to proxy/transcode non-YouTube streams (e.g. HLS .m3u8/.ts) to AAC for browser playback.
 // This avoids MEDIA_ERR_SRC_NOT_SUPPORTED when the browser cannot play the source directly.
 app.get('/radio-stream', (req, res) => {
     const sourceUrl = req.query.url;
-    console.log(`Radio-stream request received for: ${sourceUrl} (active streams: ${activeStreamCount}/${MAX_CONCURRENT_STREAMS})`);
+    console.log(`Radio-stream request received for: ${sourceUrl}`);
 
     if (!sourceUrl) {
         return res.status(400).json({ error: 'Stream URL is required' });
     }
 
-    // Check if we've reached the maximum concurrent streams
-    if (activeStreamCount >= MAX_CONCURRENT_STREAMS) {
-        console.warn(`Rejected radio-stream request - max concurrent streams reached (${activeStreamCount}/${MAX_CONCURRENT_STREAMS})`);
-        return res.status(503).json({ 
-            error: 'Server at capacity', 
-            details: `Maximum concurrent streams (${MAX_CONCURRENT_STREAMS}) reached. Please try again in a moment.`,
-            hint: 'The server is processing too many streams simultaneously. Wait a few seconds and try again.'
-        });
+    // Disable timeouts for streaming connections (use very large value)
+    const INFINITE_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
+    req.setTimeout(INFINITE_TIMEOUT);
+    res.setTimeout(INFINITE_TIMEOUT);
+    if (req.socket) {
+        req.socket.setTimeout(INFINITE_TIMEOUT);
+        req.socket.setKeepAlive(true);
     }
 
     // Set headers for audio streaming with progressive streaming
@@ -904,7 +783,7 @@ app.get('/radio-stream', (req, res) => {
         '-i', sourceUrl,
         '-f', 'adts',
         '-acodec', 'aac',
-        '-b:a', '96k',  // Reduced from 128k to save memory
+        '-b:a', '128k',  // Audio bitrate
         '-ar', '44100',
         '-ac', '2',
         '-reconnect', '1',
@@ -912,8 +791,8 @@ app.get('/radio-stream', (req, res) => {
         '-reconnect_streamed', '1',
         '-reconnect_delay_max', '30',  // Increased to 30 seconds
         '-reconnect_on_network_error', '1',
-        '-timeout', '1800000000',  // 30 minutes timeout in microseconds
-        '-rw_timeout', '1800000000',  // 30 minutes read/write timeout
+        '-timeout', '86400000000',  // 24 hours in microseconds (no timeout)
+        '-rw_timeout', '86400000000',  // 24 hours read/write timeout (no timeout)
         '-fflags', '+genpts+flush_packets',  // Generate PTS and flush packets for progressive streaming
         '-avoid_negative_ts', 'make_zero',
         '-flush_packets', '1',  // Flush packets immediately
@@ -921,35 +800,6 @@ app.get('/radio-stream', (req, res) => {
     ];
 
     const ffmpeg = spawn('ffmpeg', ffmpegArgs, { shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
-    let clientDisconnected = false;
-    
-    // Increment active stream count
-    activeStreamCount++;
-    console.log(`Radio stream started (${activeStreamCount}/${MAX_CONCURRENT_STREAMS} active)`);
-    
-    // Store stream reference for cleanup
-    const streamId = `radio-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const processTimeout = setTimeout(() => {
-        console.log('Radio stream timeout (30 minutes) - killing process');
-        try {
-            ffmpeg.kill();
-        } catch (err) {
-            console.error('Error killing ffmpeg on timeout:', err);
-        }
-        if (!res.destroyed) res.end();
-    }, STREAM_TIMEOUT);
-    
-    activeStreams.set(streamId, { ffmpeg, res, timeout: processTimeout, type: 'radio' });
-    
-    // Cleanup function
-    const cleanup = () => {
-        if (activeStreams.has(streamId)) {
-            activeStreams.delete(streamId);
-            activeStreamCount = Math.max(0, activeStreamCount - 1);
-            console.log(`Radio stream cleaned up (${activeStreamCount}/${MAX_CONCURRENT_STREAMS} active)`);
-        }
-        clearTimeout(processTimeout);
-    };
 
     const CHUNK_SIZE = 64 * 1024; // 64KB chunks for progressive streaming
 
@@ -1008,7 +858,6 @@ app.get('/radio-stream', (req, res) => {
     ffmpeg.on('error', (error) => {
         console.error('FFmpeg radio-stream spawn error:', error);
         hasError = true;
-        clearTimeout(processTimeout);
         if (!res.headersSent) {
             res.status(500).json({ error: 'FFmpeg not found. Please install ffmpeg and add it to PATH.' });
         } else {
@@ -1017,11 +866,6 @@ app.get('/radio-stream', (req, res) => {
     });
 
     ffmpeg.on('close', (code) => {
-        cleanup();
-        if (clientDisconnected) {
-            console.log(`FFmpeg radio-stream exited with code ${code} (client disconnected)`);
-            return;
-        }
         console.log(`FFmpeg radio-stream exited with code ${code}`);
         
         // If stream failed to start, send error response
@@ -1034,37 +878,6 @@ app.get('/radio-stream', (req, res) => {
         } else if (!res.destroyed) {
             res.end();
         }
-    });
-
-    req.on('close', () => {
-        clientDisconnected = true;
-        try { 
-            // Try graceful shutdown first, then force kill
-            ffmpeg.kill('SIGTERM');
-            setTimeout(() => {
-                if (!ffmpeg.killed) {
-                    ffmpeg.kill('SIGKILL');
-                }
-            }, 2000);
-        } catch (err) {
-            console.error('Error killing ffmpeg on close:', err);
-        }
-        cleanup();
-    });
-    req.on('aborted', () => {
-        clientDisconnected = true;
-        try { 
-            // Try graceful shutdown first, then force kill
-            ffmpeg.kill('SIGTERM');
-            setTimeout(() => {
-                if (!ffmpeg.killed) {
-                    ffmpeg.kill('SIGKILL');
-                }
-            }, 2000);
-        } catch (err) {
-            console.error('Error killing ffmpeg on abort:', err);
-        }
-        cleanup();
     });
 });
 
@@ -1719,6 +1532,7 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 // Get current user endpoint
+// Returns 200 with null user if not authenticated (instead of 401) to avoid browser errors
 app.get('/api/auth/me', async (req, res) => {
     try {
         if (req.session && req.session.userId) {
@@ -1727,7 +1541,8 @@ app.get('/api/auth/me', async (req, res) => {
                 return res.json({ user });
             }
         }
-        res.status(401).json({ error: 'Not authenticated' });
+        // Return 200 with null user instead of 401 to avoid browser console errors
+        res.status(200).json({ user: null });
     } catch (error) {
         console.error('Auth status error:', error);
         res.status(500).json({ error: 'Failed to check authentication status' });
@@ -1901,45 +1716,8 @@ if (!fs.existsSync(indexPath)) {
 console.log(`✅ Public directory found at: ${publicPath}`);
 console.log(`✅ index.html found at: ${indexPath}`);
 
-// Periodic cleanup function to prevent memory leaks
-setInterval(() => {
-    const os = require('os');
-    const memUsage = process.memoryUsage();
-    const memMB = {
-        rss: Math.round(memUsage.rss / 1024 / 1024),
-        heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
-        heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024),
-        external: Math.round(memUsage.external / 1024 / 1024)
-    };
-    
-    console.log(`📊 Memory usage: RSS=${memMB.rss}MB, Heap=${memMB.heapUsed}/${memMB.heapTotal}MB, External=${memMB.external}MB`);
-    console.log(`📊 Active streams: ${activeStreamCount}/${MAX_CONCURRENT_STREAMS} (${activeStreams.size} tracked)`);
-    
-    // Clean up any orphaned streams (streams that should have been cleaned up but weren't)
-    if (activeStreams.size !== activeStreamCount) {
-        console.warn(`⚠️ Stream count mismatch detected! activeStreams.size=${activeStreams.size}, activeStreamCount=${activeStreamCount}`);
-        // Reset count to match actual tracked streams
-        activeStreamCount = activeStreams.size;
-    }
-    
-    // Force cleanup of any streams with destroyed responses
-    for (const [streamId, stream] of activeStreams.entries()) {
-        if (stream.res && stream.res.destroyed) {
-            console.log(`Cleaning up orphaned stream: ${streamId}`);
-            try {
-                if (stream.ffmpeg && !stream.ffmpeg.killed) {
-                    stream.ffmpeg.kill('SIGTERM');
-                }
-            } catch (err) {
-                console.error(`Error killing orphaned stream ${streamId}:`, err);
-            }
-            activeStreams.delete(streamId);
-            activeStreamCount = Math.max(0, activeStreamCount - 1);
-        }
-    }
-}, 60000); // Run every minute
 
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
     const os = require('os');
     const networkInterfaces = os.networkInterfaces();
     let localIP = 'localhost';
@@ -1974,4 +1752,10 @@ app.listen(PORT, '0.0.0.0', () => {
         throw err;
     }
 });
+
+// Disable HTTP server timeouts to prevent 15-minute cutoffs
+// Use very large values (24 hours in milliseconds) instead of 0
+server.timeout = INFINITE_TIMEOUT;  // Very long timeout for HTTP server
+server.keepAliveTimeout = INFINITE_TIMEOUT;  // Very long keep-alive timeout
+server.headersTimeout = INFINITE_TIMEOUT;  // Very long headers timeout
 
