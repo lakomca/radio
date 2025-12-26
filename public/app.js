@@ -964,23 +964,7 @@ audioPlayer.addEventListener('progress', () => {
 
 // Handle stalled events - with automatic retry and increased buffering
 audioPlayer.addEventListener('stalled', () => {
-    console.log('⚠️ Stream stalled - waiting for data');
-    dbgAudioState('stalled');
-    const buffered = audioPlayer.buffered;
-    const bufferedTime = buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
-    console.log(`  Current readyState: ${audioPlayer.readyState}, buffered: ${bufferedTime.toFixed(2)}s`);
-    
-    // Mark connection as poor when stalling occurs
-    connectionQuality = 'poor';
-    adaptiveBufferTarget = 15; // Increase buffer target after stall
-    
-    // Don't start waiting timeout if we're already reconnecting or loading
-    if (isReconnecting || isLoading) {
-        console.log('⚠️ Stream stalled but reconnection/loading in progress, skipping timeout');
-        return;
-    }
-    
-    // Check if we have buffer - if we do, this is just normal buffering
+    // Check buffer first before logging - if we have plenty of buffer, this is just normal
     const stalledBuffered = audioPlayer.buffered;
     const stalledBufferedTime = stalledBuffered.length > 0 ? stalledBuffered.end(stalledBuffered.length - 1) : 0;
     const stalledCurrentTime = audioPlayer.currentTime || 0;
@@ -990,9 +974,24 @@ audioPlayer.addEventListener('stalled', () => {
     // For radio streams, be much more patient with buffering (they can have natural pauses)
     const bufferThreshold = isRadioStation ? 15 : 5; // 15s for radio, 5s for YouTube
     
-    // If we have significant buffer, don't start timeout - this is normal
+    // If we have significant buffer, this is normal buffering - don't log or do anything
     if (stalledBufferedAhead > bufferThreshold) {
-        console.log(`⚠️ Stream stalled but has ${stalledBufferedAhead.toFixed(2)}s buffer - normal buffering, not starting timeout`);
+        // Silently ignore - stream is fine, just buffering normally
+        return;
+    }
+    
+    // Only log if we're actually concerned (low buffer)
+    console.log('⚠️ Stream stalled - waiting for data');
+    dbgAudioState('stalled');
+    console.log(`  Current readyState: ${audioPlayer.readyState}, buffered: ${stalledBufferedTime.toFixed(2)}s, buffered ahead: ${stalledBufferedAhead.toFixed(2)}s`);
+    
+    // Mark connection as poor when stalling occurs (only if low buffer)
+    connectionQuality = 'poor';
+    adaptiveBufferTarget = 15; // Increase buffer target after stall
+    
+    // Don't start waiting timeout if we're already reconnecting or loading
+    if (isReconnecting || isLoading) {
+        console.log('⚠️ Stream stalled but reconnection/loading in progress, skipping timeout');
         return;
     }
     
@@ -1082,16 +1081,7 @@ audioPlayer.addEventListener('stalled', () => {
 
 // Handle waiting events
 audioPlayer.addEventListener('waiting', () => {
-    console.log('⏳ Stream waiting for data');
-    dbgAudioState('waiting');
-    
-    // Don't start waiting timeout if we're already reconnecting or loading
-    if (isReconnecting || isLoading) {
-        console.log('⏳ Stream waiting but reconnection/loading in progress, skipping timeout');
-        return;
-    }
-    
-    // Check if we have buffer - if we do, this is just normal buffering, not a problem
+    // Check buffer first before logging - if we have plenty of buffer, this is just normal
     const buffered = audioPlayer.buffered;
     const bufferedTime = buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
     const currentTime = audioPlayer.currentTime || 0;
@@ -1101,9 +1091,20 @@ audioPlayer.addEventListener('waiting', () => {
     // For radio streams, be much more patient with buffering (they can have natural pauses)
     const bufferThreshold = isRadioStation ? 15 : 5; // 15s for radio, 5s for YouTube
     
-    // If we have significant buffer, don't start timeout - this is normal
+    // If we have significant buffer, this is normal buffering - don't log or do anything
     if (bufferedAhead > bufferThreshold) {
-        console.log(`⏳ Stream waiting but has ${bufferedAhead.toFixed(2)}s buffer - normal buffering, not starting timeout`);
+        // Silently ignore - stream is fine, just buffering normally
+        return;
+    }
+    
+    // Only log if we're actually concerned (low buffer)
+    console.log('⏳ Stream waiting for data');
+    dbgAudioState('waiting');
+    console.log(`  Buffered ahead: ${bufferedAhead.toFixed(2)}s`);
+    
+    // Don't start waiting timeout if we're already reconnecting or loading
+    if (isReconnecting || isLoading) {
+        console.log('⏳ Stream waiting but reconnection/loading in progress, skipping timeout');
         return;
     }
     
@@ -1153,15 +1154,14 @@ audioPlayer.addEventListener('waiting', () => {
                     reconnectStream();
                 }
             } else {
-                console.log(`✅ Stream still alive (buffer: ${currentBufferedAhead.toFixed(2)}s, readyState: ${audioPlayer.readyState}, networkState: ${networkState}) - extending timeout`);
-                // Stream is still alive, extend the timeout by another period
+                console.log(`✅ Stream still alive (buffer: ${currentBufferedAhead.toFixed(2)}s, readyState: ${audioPlayer.readyState}, networkState: ${networkState}) - clearing timeout, will monitor naturally`);
+                // Stream is still alive, clear the timeout and let browser handle it naturally
+                // The 'playing' event will clear waitingStartTime when it resumes
+                waitingStartTime = null;
                 if (waitingTimeoutId) {
                     clearTimeout(waitingTimeoutId);
+                    waitingTimeoutId = null;
                 }
-                waitingStartTime = Date.now(); // Reset timer
-                // Set new timeout with same duration
-                const timeoutDuration = isRadioStation ? 120000 : 30000;
-                waitingTimeoutId = setTimeout(arguments.callee, timeoutDuration);
             }
         }, timeoutDuration);
     }
