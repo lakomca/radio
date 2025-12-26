@@ -111,30 +111,74 @@ try {
 
 # Push to GitHub
 Write-Host "`nPushing to GitHub..." -ForegroundColor Yellow
+$pushSuccess = $false
+
 try {
     if ($Force) {
         Write-Host "  ⚠️  Using --force flag (dangerous!)" -ForegroundColor Red
-        git push origin $targetBranch --force
+        $pushOutput = git push origin $targetBranch --force 2>&1
     } else {
-        git push origin $targetBranch
+        $pushOutput = git push origin $targetBranch 2>&1
     }
-    Write-Host "  ✅ Successfully pushed to GitHub!" -ForegroundColor Green
+    
+    # Check exit code immediately after git push
+    $exitCode = $LASTEXITCODE
+    $pushOutputString = if ($pushOutput -is [array]) { $pushOutput -join "`n" } else { $pushOutput.ToString() }
+    
+    # Check if push actually succeeded
+    if ($exitCode -eq 0 -and $pushOutputString -notmatch "rejected|error|failed") {
+        $pushSuccess = $true
+        Write-Host "  ✅ Successfully pushed to GitHub!" -ForegroundColor Green
+    } else {
+        Write-Host "  ❌ Push failed!" -ForegroundColor Red
+        if ($pushOutputString) {
+            Write-Host $pushOutputString -ForegroundColor Yellow
+        }
+        
+        if ($pushOutputString -match "rejected.*fetch first" -or $pushOutputString -match "Updates were rejected") {
+            Write-Host "`n⚠️  Remote has changes you don't have locally." -ForegroundColor Yellow
+            Write-Host "`nOptions:" -ForegroundColor Cyan
+            Write-Host "  1. Pull and merge first (recommended):" -ForegroundColor White
+            Write-Host "     git pull origin $targetBranch" -ForegroundColor Gray
+            Write-Host "     .\update-github.ps1 -CommitMessage '$CommitMessage'" -ForegroundColor Gray
+            Write-Host ""
+            Write-Host "  2. Pull with rebase:" -ForegroundColor White
+            Write-Host "     git pull origin $targetBranch --rebase" -ForegroundColor Gray
+            Write-Host "     .\update-github.ps1 -CommitMessage '$CommitMessage'" -ForegroundColor Gray
+            Write-Host ""
+            Write-Host "  3. Use auto-update script (pulls, merges, then you can push):" -ForegroundColor White
+            Write-Host "     .\auto-update.ps1" -ForegroundColor Gray
+            Write-Host ""
+            Write-Host "  4. Force push (⚠️  overwrites remote - dangerous!):" -ForegroundColor Red
+            Write-Host "     .\update-github.ps1 -CommitMessage '$CommitMessage' -Force" -ForegroundColor Gray
+        } else {
+            Write-Host "`nPossible solutions:" -ForegroundColor Yellow
+            Write-Host "  1. Check your internet connection" -ForegroundColor White
+            Write-Host "  2. Verify GitHub credentials (git config --global user.name/email)" -ForegroundColor White
+            Write-Host "  3. Pull latest changes first: git pull origin $targetBranch" -ForegroundColor White
+            Write-Host "  4. If you need to force push: .\update-github.ps1 -CommitMessage '$CommitMessage' -Force" -ForegroundColor White
+        }
+        exit 1
+    }
 } catch {
     Write-Host "  ❌ Error pushing to GitHub: $_" -ForegroundColor Red
     Write-Host "`nPossible solutions:" -ForegroundColor Yellow
     Write-Host "  1. Check your internet connection" -ForegroundColor White
     Write-Host "  2. Verify GitHub credentials (git config --global user.name/email)" -ForegroundColor White
     Write-Host "  3. Pull latest changes first: git pull origin $targetBranch" -ForegroundColor White
-    Write-Host "  4. If you need to force push: .\update-github.ps1 -Force" -ForegroundColor White
+    Write-Host "  4. If you need to force push: .\update-github.ps1 -CommitMessage '$CommitMessage' -Force" -ForegroundColor White
     exit 1
 }
 
-# Show final status
-Write-Host "`nFinal status:" -ForegroundColor Cyan
-git status --short
+# Only show success if push succeeded
+if ($pushSuccess) {
+    # Show final status
+    Write-Host "`nFinal status:" -ForegroundColor Cyan
+    git status --short
 
-Write-Host "`n✅ Successfully updated GitHub repository!" -ForegroundColor Green
-Write-Host "   Repository: $remoteUrl" -ForegroundColor Gray
-Write-Host "   Branch: $targetBranch" -ForegroundColor Gray
-Write-Host ""
+    Write-Host "`n✅ Successfully updated GitHub repository!" -ForegroundColor Green
+    Write-Host "   Repository: $remoteUrl" -ForegroundColor Gray
+    Write-Host "   Branch: $targetBranch" -ForegroundColor Gray
+    Write-Host ""
+}
 
