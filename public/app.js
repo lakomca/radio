@@ -3468,7 +3468,22 @@ async function loadStationsForGenre(genreTag, genreName) {
         displayStations(stations || []);
     } catch (error) {
         console.error('Error loading genre stations:', error);
-        stationsList.innerHTML = `<div class="error">Failed to load stations: ${error.message}</div>`;
+        
+        // Provide more helpful error messages
+        let errorMessage = 'Failed to load stations';
+        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+            errorMessage = 'Cannot connect to backend server. ';
+            if (window.BACKEND_URL) {
+                errorMessage += `Backend URL: ${window.BACKEND_URL}. `;
+                errorMessage += 'Make sure the backend is running and accessible.';
+            } else {
+                errorMessage += 'Backend URL not configured.';
+            }
+        } else {
+            errorMessage = `Failed to load stations: ${error.message}`;
+        }
+        
+        stationsList.innerHTML = `<div class="error">${errorMessage}</div>`;
     }
 }
 
@@ -4303,7 +4318,18 @@ let source = null;
 let animationFrameId = null;
 let isEqualizerActive = false;
 let audioElementAlreadyConnected = false; // Flag to prevent trying to connect if already connected elsewhere
-const NUM_BARS = 32; // Number of frequency bars
+const NUM_BARS = 52; // Number of frequency bars
+
+// BPM Detection variables
+let bpmDetector = null;
+let detectedBPM = 0;
+let bpmHistory = [];
+const BPM_HISTORY_SIZE = 30; // Keep last 30 BPM readings for averaging
+let energyHistory = [];
+const ENERGY_HISTORY_SIZE = 43; // ~1 second of data at 60fps
+let lastBeatTime = 0;
+const MIN_BPM = 60;
+const MAX_BPM = 200;
 
 // Initialize Web Audio API
 function initAudioContext() {
@@ -4311,11 +4337,15 @@ function initAudioContext() {
         try {
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
             analyser = audioContext.createAnalyser();
-            analyser.fftSize = 256; // Higher resolution for smoother visualization
-            analyser.smoothingTimeConstant = 0.8; // Smooth transitions
+            analyser.fftSize = 1024; // Higher resolution for 52 bars (better frequency detail)
+            analyser.smoothingTimeConstant = 0.7; // Smoother transitions for 52 bars (0.0 = instant, 1.0 = max smoothing)
+            analyser.minDecibels = -90; // Minimum dB level
+            analyser.maxDecibels = -10; // Maximum dB level
             
             const bufferLength = analyser.frequencyBinCount;
             dataArray = new Uint8Array(bufferLength);
+            
+            // Initialize BPM detector (no separate init needed, we'll detect in drawEqualizer)
         } catch (error) {
             console.error('Error initializing audio context:', error);
             return false;
@@ -4394,6 +4424,9 @@ function drawEqualizer() {
     // Get frequency data
     analyser.getByteFrequencyData(dataArray);
     
+    // Detect BPM
+    detectBPM();
+    
     // Calculate bar dimensions
     const barWidth = width / NUM_BARS;
     const barGap = barWidth * 0.1; // 10% gap between bars
@@ -4401,9 +4434,18 @@ function drawEqualizer() {
     
     // Draw bars
     for (let i = 0; i < NUM_BARS; i++) {
-        // Map to frequency data (use logarithmic distribution for better visualization)
-        const dataIndex = Math.floor((i / NUM_BARS) * dataArray.length);
-        const barHeight = (dataArray[dataIndex] / 255) * height;
+        // Map to frequency data using logarithmic distribution (more accurate for audio)
+        // Logarithmic mapping better represents how humans perceive sound frequencies
+        const logIndex = Math.pow(dataArray.length, i / NUM_BARS);
+        const dataIndex = Math.floor(Math.min(logIndex, dataArray.length - 1));
+        
+        // Get frequency value and apply sensitivity adjustment
+        let frequencyValue = dataArray[dataIndex] / 255;
+        
+        // Apply sensitivity boost for better visualization (optional)
+        // frequencyValue = Math.pow(frequencyValue, 0.7); // Makes lower values more visible
+        
+        const barHeight = frequencyValue * height;
         
         const x = i * barWidth + barGap / 2;
         const y = height - barHeight;
@@ -4442,8 +4484,91 @@ function drawEqualizer() {
         }
     }
     
+    // Update BPM display
+    updateBPMDisplay();
+    
     // Continue animation
     animationFrameId = requestAnimationFrame(drawEqualizer);
+}
+
+// BPM Detection using energy-based beat detection
+function detectBPM() {
+    if (!dataArray || !isEqualizerActive) return;
+    
+    // Calculate total energy (sum of all frequency bins)
+    let energy = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+        energy += dataArray[i];
+    }
+    
+    // Normalize energy (0-1)
+    const normalizedEnergy = energy / (dataArray.length * 255);
+    
+    // Add to energy history
+    energyHistory.push({
+        energy: normalizedEnergy,
+        time: Date.now()
+    });
+    
+    // Keep only recent history
+    if (energyHistory.length > ENERGY_HISTORY_SIZE) {
+        energyHistory.shift();
+    }
+    
+    // Need at least 1 second of data
+    if (energyHistory.length < ENERGY_HISTORY_SIZE) return;
+    
+    // Calculate average energy
+    const avgEnergy = energyHistory.reduce((sum, e) => sum + e.energy, 0) / energyHistory.length;
+    
+    // Calculate variance (for dynamic threshold)
+    const variance = energyHistory.reduce((sum, e) => sum + Math.pow(e.energy - avgEnergy, 2), 0) / energyHistory.length;
+    const threshold = avgEnergy + (Math.sqrt(variance) * 1.5); // Dynamic threshold
+    
+    // Detect beat (current energy significantly above threshold)
+    const currentEnergy = normalizedEnergy;
+    const timeSinceLastBeat = Date.now() - lastBeatTime;
+    
+    if (currentEnergy > threshold && timeSinceLastBeat > 300) { // Minimum 300ms between beats
+        // Calculate BPM from time between beats
+        if (lastBeatTime > 0) {
+            const beatInterval = timeSinceLastBeat; // milliseconds
+            const bpm = Math.round(60000 / beatInterval);
+            
+            // Filter valid BPM range
+            if (bpm >= MIN_BPM && bpm <= MAX_BPM) {
+                bpmHistory.push(bpm);
+                
+                // Keep only recent BPM readings
+                if (bpmHistory.length > BPM_HISTORY_SIZE) {
+                    bpmHistory.shift();
+                }
+                
+                // Calculate average BPM (more stable)
+                if (bpmHistory.length >= 5) {
+                    const sortedBPM = [...bpmHistory].sort((a, b) => a - b);
+                    // Use median to avoid outliers
+                    const medianIndex = Math.floor(sortedBPM.length / 2);
+                    detectedBPM = sortedBPM[medianIndex];
+                }
+            }
+        }
+        
+        lastBeatTime = Date.now();
+    }
+}
+
+// Update BPM display
+function updateBPMDisplay() {
+    const bpmDisplay = document.getElementById('bpmDisplay');
+    if (bpmDisplay) {
+        if (detectedBPM > 0 && isEqualizerActive) {
+            bpmDisplay.textContent = `${detectedBPM} BPM`;
+            bpmDisplay.style.display = 'inline';
+        } else {
+            bpmDisplay.style.display = 'none';
+        }
+    }
 }
 
 // Start equalizer
@@ -4499,6 +4624,13 @@ function stopEqualizer() {
     if (!isEqualizerActive) return;
     
     isEqualizerActive = false;
+    
+    // Reset BPM detection
+    detectedBPM = 0;
+    bpmHistory = [];
+    energyHistory = [];
+    lastBeatTime = 0;
+    updateBPMDisplay();
     
     if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);

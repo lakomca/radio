@@ -5,9 +5,11 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "start:prod": "cross-env NODE_ENV=production node server.js",
     "dev": "nodemon server.js",
     "check": "node check-setup.js",
-    "kill-port": "node kill-port.js"
+    "kill-port": "node kill-port.js",
+    "setup": "powershell -ExecutionPolicy Bypass -File .\\setup-backend-server.ps1"
   },
   "keywords": [
     "radio",

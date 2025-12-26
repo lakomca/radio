@@ -107,6 +107,7 @@
                         <!-- Current time display -->
                         <div class="progress-info">
                             <span id="currentTime">0:00</span>
+                            <span id="bpmDisplay" style="display: none; margin-left: 15px; color: #00d9ff; font-weight: 600;">0 BPM</span>
                         </div>
                         <!-- Visual Equalizer - replaces progress bar -->
                         <canvas id="equalizerCanvas"></canvas>
@@ -194,6 +195,8 @@
         </div>
     </div>
 
+    <script src="config.js"></script>
+    <script src="api-wrapper.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

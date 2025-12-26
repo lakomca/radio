@@ -13,10 +13,38 @@ const PORT = process.env.PORT || 3000;
 // Timeout constants - 24 hours in milliseconds for very long-running connections
 const INFINITE_TIMEOUT = 24 * 60 * 60 * 1000; // 86,400,000 ms
 
-// CORS configuration
+// CORS configuration - Allow Firebase Hosting and other origins
+const allowedOrigins = [
+    /^https?:\/\/localhost(:\d+)?$/,  // Local development
+    /^https?:\/\/127\.0\.0\.1(:\d+)?$/,  // Local development
+    /\.firebaseapp\.com$/,  // Firebase Hosting
+    /\.web\.app$/,  // Firebase Hosting custom domains
+    /\.ngrok-free\.dev$/,  // ngrok free tier
+    /\.ngrok\.io$/,  // ngrok paid tier
+    /\.ngrok-app\.com$/,  // ngrok app domains
+    /^https?:\/\/192\.168\.\d+\.\d+(:\d+)?$/,  // Local network IPs
+    /^https?:\/\/10\.\d+\.\d+\.\d+(:\d+)?$/,  // Local network IPs
+];
+
 app.use(cors({
-    origin: true,
-    credentials: true
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        
+        // Check if origin matches allowed patterns
+        const isAllowed = allowedOrigins.some(pattern => pattern.test(origin));
+        
+        if (isAllowed || process.env.NODE_ENV !== 'production') {
+            callback(null, true);
+        } else {
+            // In production, log blocked origins for debugging
+            console.warn('CORS blocked origin:', origin);
+            callback(null, true); // Still allow for now - update this for stricter security
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'ngrok-skip-browser-warning']
 }));
 
 // Session configuration
@@ -437,11 +465,24 @@ function searchYouTube(query) {
 const activeStreams = new Map();
 
 // CORS middleware - ensure streaming endpoints are accessible
+// When credentials are included, we must specify the exact origin, not '*'
 app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-Origin, Content-Type, Accept');
+    const origin = req.headers.origin;
+    
+    // Check if origin is allowed (from CORS config above)
+    const isAllowed = allowedOrigins.some(pattern => {
+        if (!origin) return false;
+        return pattern.test(origin);
+    });
+    
+    // Set specific origin if allowed, otherwise don't set (will be handled by cors() middleware)
+    if (origin && (isAllowed || process.env.NODE_ENV !== 'production')) {
+        res.header('Access-Control-Allow-Origin', origin);
+        res.header('Access-Control-Allow-Credentials', 'true');
+    }
+    
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-Origin, Content-Type, Accept, Authorization, ngrok-skip-browser-warning');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Credentials', 'true');
     
     // Handle preflight requests
     if (req.method === 'OPTIONS') {
@@ -1233,7 +1274,14 @@ app.get('/related', async (req, res) => {
 
 // ===== RADIO BROWSER API ENDPOINTS =====
 
-const RADIO_BROWSER_API = 'https://de1.api.radio-browser.info/json';
+// Radio Browser API servers (try multiple for reliability)
+const RADIO_BROWSER_API_SERVERS = [
+    'https://de1.api.radio-browser.info/json',
+    'https://nl1.api.radio-browser.info/json',
+    'https://at1.api.radio-browser.info/json',
+    'https://fr1.api.radio-browser.info/json'
+];
+const RADIO_BROWSER_API = RADIO_BROWSER_API_SERVERS[0]; // Default to first
 const iprdFetcher = require('./scripts/iprd-fetcher');
 const logoLookup = require('./scripts/logo-lookup');
 
@@ -1470,49 +1518,76 @@ app.get('/api/radio/search', async (req, res) => {
         
         console.log(`Proxying Radio Browser API request: ${apiUrl}`);
         
-        // Create AbortController for timeout
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        // Try multiple API servers for reliability
+        let lastError = null;
+        const timeout = 60000; // 60 second timeout (increased from 30)
         
-        try {
-            // Fetch from Radio Browser API (server-side, no CORS issues)
-            const response = await fetch(apiUrl, {
-                headers: {
-                    'User-Agent': 'Radio App/1.0'
-                },
-                signal: controller.signal
-            });
+        for (const apiServer of RADIO_BROWSER_API_SERVERS) {
+            const apiUrl = `${apiServer}/stations/search?tag=${encodeURIComponent(tag)}&limit=${limit}&order=${order}&reverse=${reverse}`;
+            console.log(`Trying Radio Browser API: ${apiServer}`);
             
-            clearTimeout(timeoutId);
-            
-            if (!response.ok) {
-                const errorText = await response.text().catch(() => 'Unknown error');
-                console.error(`Radio Browser API error: ${response.status} ${response.statusText}`, errorText);
-                throw new Error(`Radio Browser API returned ${response.status}: ${errorText}`);
+            try {
+                // Create AbortController for timeout
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), timeout);
+                
+                // Fetch from Radio Browser API (server-side, no CORS issues)
+                const response = await fetch(apiUrl, {
+                    headers: {
+                        'User-Agent': 'Radio App/1.0'
+                    },
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    const errorText = await response.text().catch(() => 'Unknown error');
+                    console.warn(`Radio Browser API error (${apiServer}): ${response.status} ${response.statusText}`);
+                    lastError = new Error(`Radio Browser API returned ${response.status}: ${errorText}`);
+                    continue; // Try next server
+                }
+                
+                const stations = await response.json();
+                
+                if (!Array.isArray(stations)) {
+                    console.warn('Radio Browser API returned non-array response:', typeof stations);
+                    return res.json([]);
+                }
+                
+                console.log(`Successfully fetched ${stations.length} stations from ${apiServer}`);
+                return res.json(stations);
+                
+            } catch (fetchError) {
+                if (fetchError.name === 'AbortError') {
+                    console.warn(`Timeout fetching from ${apiServer}, trying next server...`);
+                    lastError = new Error(`Request timeout: Radio Browser API (${apiServer}) took too long to respond`);
+                } else {
+                    console.warn(`Error fetching from ${apiServer}: ${fetchError.message}, trying next server...`);
+                    lastError = fetchError;
+                }
+                // Continue to next server
+                continue;
             }
-            
-            const stations = await response.json();
-            
-            if (!Array.isArray(stations)) {
-                console.warn('Radio Browser API returned non-array response:', typeof stations);
-                return res.json([]);
-            }
-            
-            res.json(stations);
-        } catch (fetchError) {
-            clearTimeout(timeoutId);
-            if (fetchError.name === 'AbortError') {
-                throw new Error('Request timeout: Radio Browser API took too long to respond');
-            }
-            throw fetchError;
         }
+        
+        // If all servers failed, throw the last error
+        throw lastError || new Error('All Radio Browser API servers failed');
     } catch (error) {
         console.error('Error proxying Radio Browser API search:', error);
         console.error('Error stack:', error.stack);
+        console.error('Request details:', {
+            tag: req.query.tag,
+            limit: req.query.limit,
+            apiUrl: `${RADIO_BROWSER_API}/stations/search?tag=${encodeURIComponent(req.query.tag)}&limit=${req.query.limit || 100}&order=${req.query.order || 'clickcount'}&reverse=${req.query.reverse || 'true'}`
+        });
+        
+        // Return more detailed error for debugging
         res.status(500).json({ 
             error: 'Failed to search stations', 
             details: error.message,
-            tag: req.query.tag
+            tag: req.query.tag,
+            hint: 'Check backend logs for more details. Radio Browser API may be unavailable or timing out.'
         });
     }
 });
