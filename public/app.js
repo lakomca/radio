@@ -986,8 +986,12 @@ audioPlayer.addEventListener('stalled', () => {
     const stalledCurrentTime = audioPlayer.currentTime || 0;
     const stalledBufferedAhead = stalledBufferedTime - stalledCurrentTime;
     
+    const isRadioStation = currentStation !== null;
+    // For radio streams, be much more patient with buffering (they can have natural pauses)
+    const bufferThreshold = isRadioStation ? 15 : 5; // 15s for radio, 5s for YouTube
+    
     // If we have significant buffer, don't start timeout - this is normal
-    if (stalledBufferedAhead > 5) {
+    if (stalledBufferedAhead > bufferThreshold) {
         console.log(`⚠️ Stream stalled but has ${stalledBufferedAhead.toFixed(2)}s buffer - normal buffering, not starting timeout`);
         return;
     }
@@ -995,9 +999,10 @@ audioPlayer.addEventListener('stalled', () => {
     // Start tracking waiting time
     if (!waitingStartTime) {
         waitingStartTime = Date.now();
-        // Set timeout to reconnect if waiting too long (60 seconds for radio, 30 for YouTube)
-        const isRadioStation = currentStation !== null;
-        const timeoutDuration = isRadioStation ? 60000 : 30000; // 60s for radio, 30s for YouTube
+        // Set timeout to reconnect if waiting too long
+        // Radio streams need much more patience (2 minutes) - they can have long natural pauses
+        // YouTube streams are more reliable (30 seconds)
+        const timeoutDuration = isRadioStation ? 120000 : 30000; // 120s (2min) for radio, 30s for YouTube
         
         if (waitingTimeoutId) clearTimeout(waitingTimeoutId);
         waitingTimeoutId = setTimeout(() => {
@@ -1019,18 +1024,31 @@ audioPlayer.addEventListener('stalled', () => {
             console.warn(`⚠️ Stream has been stalled for ${Math.floor(waitDuration / 1000)}s - checking if reconnection needed`);
             console.warn(`  Buffered: ${currentBufferedTime.toFixed(2)}s, buffered ahead: ${currentBufferedAhead.toFixed(2)}s, readyState: ${audioPlayer.readyState}`);
             
-            // Only reconnect if we have no buffer or very little buffer
-            if (currentBufferedAhead < 1 && audioPlayer.readyState < 3) {
-                console.warn(`⚠️ No buffer and low readyState - attempting reconnection`);
+            // For radio streams, be much more conservative - only reconnect if definitely dead
+            // Check multiple conditions to ensure the stream is actually dead
+            const networkState = audioPlayer.networkState; // 0=empty, 1=idle, 2=loading, 3=no source
+            const isDefinitelyDead = currentBufferedAhead < 0.5 && // Almost no buffer
+                                    audioPlayer.readyState < 2 && // No data loaded
+                                    (networkState === 3 || networkState === 0); // No source or empty
+            
+            // Only reconnect if stream is definitely dead
+            // For radio, we need stronger evidence - very low buffer AND low readyState AND network issue
+            if (isDefinitelyDead) {
+                console.warn(`⚠️ Stream appears dead (buffer: ${currentBufferedAhead.toFixed(2)}s, readyState: ${audioPlayer.readyState}, networkState: ${networkState}) - attempting reconnection`);
                 waitingStartTime = null;
                 waitingTimeoutId = null;
                 if (!isLoading && !isReconnecting && currentSourceUrl) {
                     reconnectStream();
                 }
             } else {
-                console.log(`✅ Stream has buffer (${currentBufferedAhead.toFixed(2)}s) - not reconnecting`);
+                console.log(`✅ Stream still alive (buffer: ${currentBufferedAhead.toFixed(2)}s, readyState: ${audioPlayer.readyState}, networkState: ${networkState}) - clearing timeout, will monitor naturally`);
+                // Stream is still alive, clear the timeout and let browser handle it naturally
+                // The 'playing' event will clear waitingStartTime when it resumes
                 waitingStartTime = null;
-                waitingTimeoutId = null;
+                if (waitingTimeoutId) {
+                    clearTimeout(waitingTimeoutId);
+                    waitingTimeoutId = null;
+                }
             }
         }, timeoutDuration);
     }
@@ -1079,8 +1097,12 @@ audioPlayer.addEventListener('waiting', () => {
     const currentTime = audioPlayer.currentTime || 0;
     const bufferedAhead = bufferedTime - currentTime;
     
-    // If we have significant buffer (more than 5 seconds), don't start timeout - this is normal
-    if (bufferedAhead > 5) {
+    const isRadioStation = currentStation !== null;
+    // For radio streams, be much more patient with buffering (they can have natural pauses)
+    const bufferThreshold = isRadioStation ? 15 : 5; // 15s for radio, 5s for YouTube
+    
+    // If we have significant buffer, don't start timeout - this is normal
+    if (bufferedAhead > bufferThreshold) {
         console.log(`⏳ Stream waiting but has ${bufferedAhead.toFixed(2)}s buffer - normal buffering, not starting timeout`);
         return;
     }
@@ -1088,10 +1110,9 @@ audioPlayer.addEventListener('waiting', () => {
     // Start tracking waiting time if not already tracking
     if (!waitingStartTime) {
         waitingStartTime = Date.now();
-        // Set timeout to reconnect if waiting too long (60 seconds for radio, 30 for YouTube)
-        // Radio streams can have longer pauses, so be more patient
-        const isRadioStation = currentStation !== null;
-        const timeoutDuration = isRadioStation ? 60000 : 30000; // 60s for radio, 30s for YouTube
+        // Set timeout to reconnect if waiting too long
+        // Radio streams need much more patience (2 minutes) - they can have long natural pauses
+        const timeoutDuration = isRadioStation ? 120000 : 30000; // 120s (2min) for radio, 30s for YouTube
         
         if (waitingTimeoutId) clearTimeout(waitingTimeoutId);
         waitingTimeoutId = setTimeout(() => {
@@ -1113,19 +1134,34 @@ audioPlayer.addEventListener('waiting', () => {
             console.warn(`⚠️ Stream has been waiting for ${Math.floor(waitDuration / 1000)}s - checking if reconnection needed`);
             console.warn(`  Buffered: ${currentBufferedTime.toFixed(2)}s, buffered ahead: ${currentBufferedAhead.toFixed(2)}s, readyState: ${audioPlayer.readyState}`);
             
-            // Only reconnect if we have no buffer or very little buffer (< 1 second)
-            // If we have buffer, the stream is working, just paused briefly
-            if (currentBufferedAhead < 1 && audioPlayer.readyState < 3) {
-                console.warn(`⚠️ No buffer and low readyState - attempting reconnection`);
+            // For radio streams, be much more conservative - only reconnect if definitely dead
+            // Check multiple conditions to ensure the stream is actually dead
+            const networkState = audioPlayer.networkState; // 0=empty, 1=idle, 2=loading, 3=no source
+            const isDefinitelyDead = currentBufferedAhead < 0.5 && // Almost no buffer
+                                    audioPlayer.readyState < 2 && // No data loaded
+                                    (networkState === 3 || networkState === 0); // No source or empty
+            
+            // Only reconnect if stream is definitely dead
+            if (isDefinitelyDead) {
+                console.warn(`⚠️ Stream appears dead (buffer: ${currentBufferedAhead.toFixed(2)}s, readyState: ${audioPlayer.readyState}, networkState: ${networkState}) - attempting reconnection`);
                 waitingStartTime = null;
-                waitingTimeoutId = null;
+                if (waitingTimeoutId) {
+                    clearTimeout(waitingTimeoutId);
+                    waitingTimeoutId = null;
+                }
                 if (!isLoading && !isReconnecting && currentSourceUrl) {
                     reconnectStream();
                 }
             } else {
-                console.log(`✅ Stream has buffer (${currentBufferedAhead.toFixed(2)}s) - not reconnecting, will resume naturally`);
-                waitingStartTime = null;
-                waitingTimeoutId = null;
+                console.log(`✅ Stream still alive (buffer: ${currentBufferedAhead.toFixed(2)}s, readyState: ${audioPlayer.readyState}, networkState: ${networkState}) - extending timeout`);
+                // Stream is still alive, extend the timeout by another period
+                if (waitingTimeoutId) {
+                    clearTimeout(waitingTimeoutId);
+                }
+                waitingStartTime = Date.now(); // Reset timer
+                // Set new timeout with same duration
+                const timeoutDuration = isRadioStation ? 120000 : 30000;
+                waitingTimeoutId = setTimeout(arguments.callee, timeoutDuration);
             }
         }, timeoutDuration);
     }
