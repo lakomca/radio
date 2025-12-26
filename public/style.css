@@ -860,13 +860,25 @@ body {
 
 .player-controls .progress-info {
     display: flex;
-    justify-content: flex-end;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: flex-start;
     margin-bottom: 0;
-    font-size: 0.75em;
-    color: #b3b3b3;
-    font-weight: 500;
+    gap: 4px;
     width: 100%;
     padding-right: 4px;
+}
+
+.current-time-display {
+    font-size: 1.1em;
+    font-weight: 600;
+    color: #ffaa33;
+}
+
+.bpm-display {
+    font-size: 0.85em;
+    color: #00d9ff;
+    font-weight: 600;
 }
 
 .player-progress-section {
@@ -1812,8 +1824,15 @@ body {
     }
     
     .player-controls .progress-info {
-        font-size: 0.7em;
         margin-bottom: 4px;
+    }
+    
+    .current-time-display {
+        font-size: 1em;
+    }
+    
+    .bpm-display {
+        font-size: 0.75em;
     }
     
     .control-btn {
