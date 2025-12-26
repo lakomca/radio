@@ -770,27 +770,34 @@ async function reconnectStream() {
         }
         waitingStartTime = null;
         
-        // Force a restart by clearing the loading flag and resetting the media element
+        // Force a complete reset: clear all state flags
         isLoading = false;
         loadingUrl = null;
         
         try {
-            // Pause and clear the stream
+            // Pause and completely clear the stream
             if (!audioPlayer.paused) {
                 audioPlayer.pause();
             }
-            // Small delay to let pause complete
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // Completely reset the audio element
             audioPlayer.removeAttribute('src');
-            audioPlayer.load();
-            // Small delay to let the media element reset before reloading
-            await new Promise(resolve => setTimeout(resolve, 100));
+            audioPlayer.src = ''; // Explicitly set to empty string
+            audioPlayer.load(); // This forces a reset
+            // Reset currentTime to ensure clean state
+            if (audioPlayer.currentTime > 0) {
+                audioPlayer.currentTime = 0;
+            }
+            
+            // Give the media element time to fully reset (important for proper reconnection)
+            await new Promise(resolve => setTimeout(resolve, 500));
         } catch (e) {
             console.warn('Error resetting audio player:', e);
         }
         
-        // Reload the stream
-        loadStream(currentSourceUrl);
+        // Now reload the stream - use forceReload=true to bypass duplicate detection
+        // This ensures we actually reload even if the URL is the same
+        console.log('🔄 Calling loadStream with forceReload=true to reconnect');
+        loadStream(currentSourceUrl, true); // Force reload even if URL is the same
     } finally {
         // Reset the flag after a delay to allow loadStream to set isLoading
         setTimeout(() => {
@@ -879,7 +886,9 @@ audioPlayer.addEventListener('timeupdate', () => {
     }
     
     // Detect if stream restarted (time jumped backwards significantly)
-    if (lastCurrentTime > 5 && currentTime < lastCurrentTime - 2 && !audioPlayer.seeking) {
+    // But ignore if we're reconnecting, loading, or if src is null (expected during reset)
+    const isExpectedReset = isReconnecting || isLoading || !audioPlayer.src || audioPlayer.src === '';
+    if (lastCurrentTime > 5 && currentTime < lastCurrentTime - 2 && !audioPlayer.seeking && !isExpectedReset) {
         console.error('🚨 STREAM RESTART DETECTED!');
         console.error('Time jumped from', lastCurrentTime, 'to', currentTime);
         console.error('Current src:', audioPlayer.src);
@@ -971,10 +980,25 @@ audioPlayer.addEventListener('stalled', () => {
         return;
     }
     
+    // Check if we have buffer - if we do, this is just normal buffering
+    const stalledBuffered = audioPlayer.buffered;
+    const stalledBufferedTime = stalledBuffered.length > 0 ? stalledBuffered.end(stalledBuffered.length - 1) : 0;
+    const stalledCurrentTime = audioPlayer.currentTime || 0;
+    const stalledBufferedAhead = stalledBufferedTime - stalledCurrentTime;
+    
+    // If we have significant buffer, don't start timeout - this is normal
+    if (stalledBufferedAhead > 5) {
+        console.log(`⚠️ Stream stalled but has ${stalledBufferedAhead.toFixed(2)}s buffer - normal buffering, not starting timeout`);
+        return;
+    }
+    
     // Start tracking waiting time
     if (!waitingStartTime) {
         waitingStartTime = Date.now();
-        // Set timeout to reconnect if waiting too long (30 seconds)
+        // Set timeout to reconnect if waiting too long (60 seconds for radio, 30 for YouTube)
+        const isRadioStation = currentStation !== null;
+        const timeoutDuration = isRadioStation ? 60000 : 30000; // 60s for radio, 30s for YouTube
+        
         if (waitingTimeoutId) clearTimeout(waitingTimeoutId);
         waitingTimeoutId = setTimeout(() => {
             // Double-check we should still reconnect
@@ -985,18 +1009,30 @@ audioPlayer.addEventListener('stalled', () => {
                 return;
             }
             
+            // Check buffer again before reconnecting
+            const currentBuffered = audioPlayer.buffered;
+            const currentBufferedTime = currentBuffered.length > 0 ? currentBuffered.end(currentBuffered.length - 1) : 0;
+            const currentTimeNow = audioPlayer.currentTime || 0;
+            const currentBufferedAhead = currentBufferedTime - currentTimeNow;
+            
             const waitDuration = Date.now() - waitingStartTime;
-            const buffered = audioPlayer.buffered;
-            const bufferedTime = buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
-            console.warn(`⚠️ Stream has been waiting for ${Math.floor(waitDuration / 1000)}s - attempting reconnection`);
-            console.warn(`  Buffered: ${bufferedTime.toFixed(2)}s, readyState: ${audioPlayer.readyState}`);
-            waitingStartTime = null;
-            waitingTimeoutId = null;
-            // Only reconnect if we're not still loading and playback has started
-            if (!isLoading && !isReconnecting && currentSourceUrl) {
-                reconnectStream();
+            console.warn(`⚠️ Stream has been stalled for ${Math.floor(waitDuration / 1000)}s - checking if reconnection needed`);
+            console.warn(`  Buffered: ${currentBufferedTime.toFixed(2)}s, buffered ahead: ${currentBufferedAhead.toFixed(2)}s, readyState: ${audioPlayer.readyState}`);
+            
+            // Only reconnect if we have no buffer or very little buffer
+            if (currentBufferedAhead < 1 && audioPlayer.readyState < 3) {
+                console.warn(`⚠️ No buffer and low readyState - attempting reconnection`);
+                waitingStartTime = null;
+                waitingTimeoutId = null;
+                if (!isLoading && !isReconnecting && currentSourceUrl) {
+                    reconnectStream();
+                }
+            } else {
+                console.log(`✅ Stream has buffer (${currentBufferedAhead.toFixed(2)}s) - not reconnecting`);
+                waitingStartTime = null;
+                waitingTimeoutId = null;
             }
-        }, 30000); // 30 second timeout
+        }, timeoutDuration);
     }
     
     // If we're still loading and have some data, try to play
@@ -1037,10 +1073,26 @@ audioPlayer.addEventListener('waiting', () => {
         return;
     }
     
+    // Check if we have buffer - if we do, this is just normal buffering, not a problem
+    const buffered = audioPlayer.buffered;
+    const bufferedTime = buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
+    const currentTime = audioPlayer.currentTime || 0;
+    const bufferedAhead = bufferedTime - currentTime;
+    
+    // If we have significant buffer (more than 5 seconds), don't start timeout - this is normal
+    if (bufferedAhead > 5) {
+        console.log(`⏳ Stream waiting but has ${bufferedAhead.toFixed(2)}s buffer - normal buffering, not starting timeout`);
+        return;
+    }
+    
     // Start tracking waiting time if not already tracking
     if (!waitingStartTime) {
         waitingStartTime = Date.now();
-        // Set timeout to reconnect if waiting too long (30 seconds)
+        // Set timeout to reconnect if waiting too long (60 seconds for radio, 30 for YouTube)
+        // Radio streams can have longer pauses, so be more patient
+        const isRadioStation = currentStation !== null;
+        const timeoutDuration = isRadioStation ? 60000 : 30000; // 60s for radio, 30s for YouTube
+        
         if (waitingTimeoutId) clearTimeout(waitingTimeoutId);
         waitingTimeoutId = setTimeout(() => {
             // Double-check we should still reconnect
@@ -1051,18 +1103,31 @@ audioPlayer.addEventListener('waiting', () => {
                 return;
             }
             
+            // Check buffer again - if we now have buffer, don't reconnect
+            const currentBuffered = audioPlayer.buffered;
+            const currentBufferedTime = currentBuffered.length > 0 ? currentBuffered.end(currentBuffered.length - 1) : 0;
+            const currentTimeNow = audioPlayer.currentTime || 0;
+            const currentBufferedAhead = currentBufferedTime - currentTimeNow;
+            
             const waitDuration = Date.now() - waitingStartTime;
-            const buffered = audioPlayer.buffered;
-            const bufferedTime = buffered.length > 0 ? buffered.end(buffered.length - 1) : 0;
-            console.warn(`⚠️ Stream has been waiting for ${Math.floor(waitDuration / 1000)}s - attempting reconnection`);
-            console.warn(`  Buffered: ${bufferedTime.toFixed(2)}s, readyState: ${audioPlayer.readyState}`);
-            waitingStartTime = null;
-            waitingTimeoutId = null;
-            // Only reconnect if we're not still loading and playback has started
-            if (!isLoading && !isReconnecting && currentSourceUrl) {
-                reconnectStream();
+            console.warn(`⚠️ Stream has been waiting for ${Math.floor(waitDuration / 1000)}s - checking if reconnection needed`);
+            console.warn(`  Buffered: ${currentBufferedTime.toFixed(2)}s, buffered ahead: ${currentBufferedAhead.toFixed(2)}s, readyState: ${audioPlayer.readyState}`);
+            
+            // Only reconnect if we have no buffer or very little buffer (< 1 second)
+            // If we have buffer, the stream is working, just paused briefly
+            if (currentBufferedAhead < 1 && audioPlayer.readyState < 3) {
+                console.warn(`⚠️ No buffer and low readyState - attempting reconnection`);
+                waitingStartTime = null;
+                waitingTimeoutId = null;
+                if (!isLoading && !isReconnecting && currentSourceUrl) {
+                    reconnectStream();
+                }
+            } else {
+                console.log(`✅ Stream has buffer (${currentBufferedAhead.toFixed(2)}s) - not reconnecting, will resume naturally`);
+                waitingStartTime = null;
+                waitingTimeoutId = null;
             }
-        }, 30000); // 30 second timeout
+        }, timeoutDuration);
     }
 });
 
@@ -1446,7 +1511,7 @@ if (playerFavoriteBtn) {
 // Load stream function
 // - YouTube URLs: stream via backend (/stream?url=...) so we can extract audio with yt-dlp + ffmpeg
 // - Non-YouTube URLs (radio stations): play directly in the browser audio element
-function loadStream(youtubeUrl) {
+function loadStream(youtubeUrl, forceReload = false) {
     // Clear any waiting timeout when loading a new stream
     if (waitingTimeoutId) {
         clearTimeout(waitingTimeoutId);
@@ -1465,8 +1530,8 @@ function loadStream(youtubeUrl) {
         isReconnecting = false;
     }
     
-    // Prevent loading the same URL that's already being loaded
-    if (loadingUrl === youtubeUrl || (currentStreamUrl && currentStreamUrl.includes(encodeURIComponent(youtubeUrl)))) {
+    // Prevent loading the same URL that's already being loaded (unless forceReload is true)
+    if (!forceReload && (loadingUrl === youtubeUrl || (currentStreamUrl && currentStreamUrl.includes(encodeURIComponent(youtubeUrl))))) {
         console.log('⚠️ Same URL already loading, ignoring duplicate request for:', youtubeUrl);
         // If it's already loading and paused, try to play it
         // But don't try to play if we're reconnecting (to avoid AbortError)
@@ -1857,17 +1922,26 @@ function loadStream(youtubeUrl) {
                     loadingUrl = null;
                     hasStartedPlayback = true;
                     
-                    // Set up proactive reconnection to prevent 15-minute timeouts (reconnect at 14 minutes)
+                    // Set up proactive reconnection to prevent 15-minute timeouts (reconnect at 13.5 minutes)
                     // This prevents Railway/infrastructure timeouts from killing long-running streams
+                    // Only set this up if the stream is playing smoothly (not for radio stations that might have issues)
                     if (proactiveReconnectTimeoutId) {
                         clearTimeout(proactiveReconnectTimeoutId);
                     }
-                    proactiveReconnectTimeoutId = setTimeout(() => {
-                        if (currentSourceUrl && !isReconnecting && !isLoading && !audioPlayer.paused) {
-                            console.log('🔄 Proactive reconnection to prevent 15-minute timeout');
-                            reconnectStream();
-                        }
-                    }, 14 * 60 * 1000); // 14 minutes
+                    // Only do proactive reconnection for YouTube streams, not radio (radio streams can be more fragile)
+                    const shouldProactiveReconnect = isYouTubeSource && !currentStation;
+                    if (shouldProactiveReconnect) {
+                        proactiveReconnectTimeoutId = setTimeout(() => {
+                            // Double-check conditions before reconnecting
+                            if (currentSourceUrl && !isReconnecting && !isLoading && !audioPlayer.paused && 
+                                audioPlayer.readyState >= 3 && !waitingStartTime) {
+                                console.log('🔄 Proactive reconnection to prevent 15-minute timeout');
+                                reconnectStream();
+                            } else {
+                                console.log('⚠️ Skipping proactive reconnection - stream not in stable state');
+                            }
+                        }, 13.5 * 60 * 1000); // 13.5 minutes (slightly before 15 min)
+                    }
                     
                     // Auto-start equalizer when audio starts playing (always on by default)
                     if (!isEqualizerActive && !audioElementAlreadyConnected) {
@@ -1926,16 +2000,22 @@ function loadStream(youtubeUrl) {
                                 hasStartedPlayback = true;
                                 reconnectAttempts = 0;
                                 
-                                // Set up proactive reconnection to prevent 15-minute timeouts
+                                // Set up proactive reconnection to prevent 15-minute timeouts (only for YouTube)
                                 if (proactiveReconnectTimeoutId) {
                                     clearTimeout(proactiveReconnectTimeoutId);
                                 }
-                                proactiveReconnectTimeoutId = setTimeout(() => {
-                                    if (currentSourceUrl && !isReconnecting && !isLoading && !audioPlayer.paused) {
-                                        console.log('🔄 Proactive reconnection to prevent 15-minute timeout');
-                                        reconnectStream();
-                                    }
-                                }, 14 * 60 * 1000); // 14 minutes
+                                const shouldProactiveReconnect = isYouTubeSource && !currentStation;
+                                if (shouldProactiveReconnect) {
+                                    proactiveReconnectTimeoutId = setTimeout(() => {
+                                        if (currentSourceUrl && !isReconnecting && !isLoading && !audioPlayer.paused && 
+                                            audioPlayer.readyState >= 3 && !waitingStartTime) {
+                                            console.log('🔄 Proactive reconnection to prevent 15-minute timeout');
+                                            reconnectStream();
+                                        } else {
+                                            console.log('⚠️ Skipping proactive reconnection - stream not in stable state');
+                                        }
+                                    }, 13.5 * 60 * 1000); // 13.5 minutes
+                                }
                                 
                                 updatePlayPauseButton(true);
                                 cleanupLoad();
@@ -1966,16 +2046,22 @@ function loadStream(youtubeUrl) {
                                 hasStartedPlayback = true;
                                 reconnectAttempts = 0;
                                 
-                                // Set up proactive reconnection to prevent 15-minute timeouts
+                                // Set up proactive reconnection to prevent 15-minute timeouts (only for YouTube)
                                 if (proactiveReconnectTimeoutId) {
                                     clearTimeout(proactiveReconnectTimeoutId);
                                 }
-                                proactiveReconnectTimeoutId = setTimeout(() => {
-                                    if (currentSourceUrl && !isReconnecting && !isLoading && !audioPlayer.paused) {
-                                        console.log('🔄 Proactive reconnection to prevent 15-minute timeout');
-                                        reconnectStream();
-                                    }
-                                }, 14 * 60 * 1000); // 14 minutes
+                                const shouldProactiveReconnect = isYouTubeSource && !currentStation;
+                                if (shouldProactiveReconnect) {
+                                    proactiveReconnectTimeoutId = setTimeout(() => {
+                                        if (currentSourceUrl && !isReconnecting && !isLoading && !audioPlayer.paused && 
+                                            audioPlayer.readyState >= 3 && !waitingStartTime) {
+                                            console.log('🔄 Proactive reconnection to prevent 15-minute timeout');
+                                            reconnectStream();
+                                        } else {
+                                            console.log('⚠️ Skipping proactive reconnection - stream not in stable state');
+                                        }
+                                    }, 13.5 * 60 * 1000); // 13.5 minutes
+                                }
                                 
                                 updatePlayPauseButton(true);
                                 cleanupLoad();
