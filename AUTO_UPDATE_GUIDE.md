@@ -1,4 +1,3 @@
-# Auto-Update Script Guide
 
 The `auto-update.ps1` script automatically pulls updates from GitHub, merges changes, and updates your backend server.
 
