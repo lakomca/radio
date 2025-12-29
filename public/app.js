@@ -96,6 +96,8 @@ let isLoading = false;
 let loadingUrl = null; // Track the URL currently being loaded
 let playlist = []; // Array to store playlist
 let currentIndex = -1; // Current song index in playlist
+let metadataInterval = null; // Interval for polling stream metadata
+let lastMetadataTitle = null; // Track last metadata title to detect changes
 let endedHandler = null; // Handler for ended event
 let isBuffering = false;
 let lastCurrentTime = 0;
@@ -441,6 +443,7 @@ async function loadFavorites() {
                 };
                 await playCategoryStation(station);
             } else {
+                stopMetadataPolling();
                 currentStation = null;
                 currentVideoUrl = first.url;
                 currentVideoTitle = first.title;
@@ -1248,6 +1251,7 @@ prevBtn.addEventListener('click', () => {
         currentIndex--;
         const prevVideo = playlist[currentIndex];
         // Clear station state when switching to video
+        stopMetadataPolling();
         currentStation = null;
         
         currentVideoUrl = prevVideo.url;
@@ -1285,6 +1289,7 @@ nextBtn.addEventListener('click', async () => {
                 await playCategoryStation(station);
             } else {
                 // Video
+                stopMetadataPolling();
                 currentStation = null;
                 currentVideoUrl = nextVideo.url;
                 currentVideoDuration = nextVideo.duration;
@@ -1375,6 +1380,8 @@ stopBtn.addEventListener('click', () => {
     audioPlayer.currentTime = 0;
     updatePlayPauseButton(false);
     updateNowPlayingTitle(null);
+    // Stop metadata polling when switching away from radio
+    stopMetadataPolling();
     currentStation = null; // Clear current station
     currentVideoId = null; // Clear video ID
     updateVideoThumbnail(null); // Clear thumbnail
@@ -3197,6 +3204,9 @@ async function playCategoryStation(station) {
         
         // Load and play the stream
         await loadStream(streamUrl);
+        
+        // Start metadata polling for radio stations
+        startMetadataPolling(streamUrl);
     } catch (error) {
         console.error('Error playing station:', error);
         alert(`Failed to play ${station.name}: ${error.message || 'Stream unavailable'}`);
@@ -3237,6 +3247,9 @@ async function playRadioStation(station) {
         // Try to load and play the stream
         try {
             await loadStream(streamUrl);
+            
+            // Start metadata polling for radio stations
+            startMetadataPolling(streamUrl);
         } catch (streamError) {
             console.error('Stream error:', streamError);
             throw streamError;
@@ -3501,6 +3514,29 @@ async function loadStationsForGenre(genreTag, genreName) {
         }
         
         const stations = await response.json();
+        
+        // Check if we got empty results (API might be down)
+        if (!stations || stations.length === 0) {
+            stationsList.innerHTML = `
+                <div class="error-message" style="text-align: center; padding: 40px 20px;">
+                    <div style="color: #ffaa33; font-size: 1.2em; margin-bottom: 10px;">⚠️ No stations found</div>
+                    <div style="color: #88aabb; font-size: 0.9em;">
+                        The Radio Browser API appears to be unavailable or returned no results.<br>
+                        This could be due to:
+                        <ul style="text-align: left; display: inline-block; margin-top: 10px;">
+                            <li>Radio Browser API servers are temporarily down</li>
+                            <li>Network connectivity issues</li>
+                            <li>No stations match this genre</li>
+                        </ul>
+                        <div style="margin-top: 15px;">
+                            Please try again later or try a different genre.
+                        </div>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+        
         displayStations(stations || []);
     } catch (error) {
         console.error('Error loading genre stations:', error);
@@ -3515,11 +3551,21 @@ async function loadStationsForGenre(genreTag, genreName) {
             } else {
                 errorMessage += 'Backend URL not configured.';
             }
+        } else if (error.message.includes('500')) {
+            errorMessage = 'Backend server error. The Radio Browser API may be unavailable.';
         } else {
             errorMessage = `Failed to load stations: ${error.message}`;
         }
         
-        stationsList.innerHTML = `<div class="error">${errorMessage}</div>`;
+        stationsList.innerHTML = `
+            <div class="error-message" style="text-align: center; padding: 40px 20px;">
+                <div style="color: #ffaa33; margin-bottom: 10px;">⚠️ ${errorMessage}</div>
+                <div style="color: #88aabb; font-size: 0.9em;">
+                    If this persists, the Radio Browser API servers may be down.<br>
+                    Please try again later.
+                </div>
+            </div>
+        `;
     }
 }
 
@@ -3679,6 +3725,7 @@ function loadMoreVideos() {
             if (currentIndex === -1) currentIndex = absoluteIndex;
             
             // Clear station state when switching to video
+            stopMetadataPolling();
             currentStation = null;
             
             // Keep search results visible - don't clear them
@@ -4724,4 +4771,81 @@ window.addEventListener('resize', () => {
         equalizerCanvas.height = 60; // Fixed height for equalizer
     }
 });
+
+// ===== STREAM METADATA POLLING =====
+
+// Start polling for stream metadata
+function startMetadataPolling(streamUrl) {
+    // Stop any existing metadata polling
+    stopMetadataPolling();
+    
+    // Only poll for radio stations (not YouTube)
+    if (!currentStation || !streamUrl) {
+        return;
+    }
+    
+    // Initial metadata fetch after 2 seconds (give stream time to start)
+    setTimeout(() => {
+        fetchMetadata(streamUrl);
+    }, 2000);
+    
+    // Poll every 10 seconds for metadata updates
+    metadataInterval = setInterval(() => {
+        if (currentStation && !audioPlayer.paused) {
+            fetchMetadata(streamUrl);
+        }
+    }, 10000); // Poll every 10 seconds
+}
+
+// Stop metadata polling
+function stopMetadataPolling() {
+    if (metadataInterval) {
+        clearInterval(metadataInterval);
+        metadataInterval = null;
+    }
+    lastMetadataTitle = null;
+}
+
+// Fetch metadata from stream
+async function fetchMetadata(streamUrl) {
+    if (!streamUrl || !currentStation) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/radio/metadata?url=${encodeURIComponent(streamUrl)}`);
+        const data = await response.json();
+        
+        if (data.success && data.title) {
+            // Only update if title changed
+            if (data.title !== lastMetadataTitle) {
+                lastMetadataTitle = data.title;
+                
+                // Format display: "Station Name - Artist - Song" or "Station Name - Song"
+                let displayTitle = currentStation.name;
+                if (data.artist && data.song) {
+                    displayTitle = `${currentStation.name} - ${data.artist} - ${data.song}`;
+                } else if (data.song) {
+                    displayTitle = `${currentStation.name} - ${data.song}`;
+                }
+                
+                // Update UI
+                if (nowPlayingTitle) {
+                    nowPlayingTitle.textContent = displayTitle;
+                }
+                updatePageTitle(displayTitle);
+                
+                console.log('📻 Stream metadata updated:', {
+                    station: currentStation.name,
+                    title: data.title,
+                    artist: data.artist,
+                    song: data.song
+                });
+            }
+        }
+    } catch (error) {
+        // Silently fail - metadata is optional
+        console.debug('Metadata fetch failed (this is normal for some streams):', error.message);
+    }
+}
 

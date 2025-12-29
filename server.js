@@ -6,6 +6,8 @@ const path = require('path');
 const fs = require('fs');
 const cors = require('cors');
 const db = require('./database');
+const http = require('http');
+const https = require('https');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1277,9 +1279,14 @@ app.get('/related', async (req, res) => {
 // Radio Browser API servers (try multiple for reliability)
 const RADIO_BROWSER_API_SERVERS = [
     'https://de1.api.radio-browser.info/json',
+    'https://de2.api.radio-browser.info/json',  // Germany server 2
     'https://nl1.api.radio-browser.info/json',
     'https://at1.api.radio-browser.info/json',
-    'https://fr1.api.radio-browser.info/json'
+    'https://fr1.api.radio-browser.info/json',
+    'https://fi1.api.radio-browser.info/json',  // Finland server
+    'https://uk1.api.radio-browser.info/json',  // UK server
+    'https://us1.api.radio-browser.info/json',  // US server
+    'https://ch1.api.radio-browser.info/json'   // Switzerland server
 ];
 const RADIO_BROWSER_API = RADIO_BROWSER_API_SERVERS[0]; // Default to first
 const iprdFetcher = require('./scripts/iprd-fetcher');
@@ -1571,8 +1578,13 @@ app.get('/api/radio/search', async (req, res) => {
             }
         }
         
-        // If all servers failed, throw the last error
-        throw lastError || new Error('All Radio Browser API servers failed');
+        // If all servers failed, return empty array instead of error
+        // This allows the UI to continue working even if API is down
+        console.warn('⚠️ All Radio Browser API servers failed. Returning empty results.');
+        console.warn('Last error:', lastError?.message || 'Unknown error');
+        
+        // Return empty array so UI doesn't break
+        return res.json([]);
     } catch (error) {
         console.error('Error proxying Radio Browser API search:', error);
         console.error('Error stack:', error.stack);
@@ -1582,13 +1594,10 @@ app.get('/api/radio/search', async (req, res) => {
             apiUrl: `${RADIO_BROWSER_API}/stations/search?tag=${encodeURIComponent(req.query.tag)}&limit=${req.query.limit || 100}&order=${req.query.order || 'clickcount'}&reverse=${req.query.reverse || 'true'}`
         });
         
-        // Return more detailed error for debugging
-        res.status(500).json({ 
-            error: 'Failed to search stations', 
-            details: error.message,
-            tag: req.query.tag,
-            hint: 'Check backend logs for more details. Radio Browser API may be unavailable or timing out.'
-        });
+        // Return empty array instead of 500 error to prevent UI breakage
+        // The frontend can handle empty results gracefully
+        console.warn('⚠️ Returning empty results due to API error');
+        return res.json([]);
     }
 });
 
@@ -1659,6 +1668,333 @@ app.get('/api/radio/stream/:stationId', async (req, res) => {
     } catch (error) {
         console.error('Error getting stream URL:', error);
         res.status(500).json({ error: 'Failed to get stream URL', details: error.message });
+    }
+});
+
+// Parse M3U8 playlist for metadata
+async function parseM3U8Metadata(streamUrl) {
+    try {
+        // Create AbortController for timeout (AbortSignal.timeout may not be available in Node.js)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        
+        const response = await fetch(streamUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            },
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            return null;
+        }
+        
+        const content = await response.text();
+        const lines = content.split('\n');
+        
+        // Look for EXTINF lines with metadata
+        // Format: #EXTINF:-1,Artist - Song Title
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (line.startsWith('#EXTINF:')) {
+                const match = line.match(/#EXTINF:(-?\d+)(?:\s+(.+))?/);
+                if (match && match[2]) {
+                    const attrs = match[2];
+                    // Extract title (after comma)
+                    const titleMatch = attrs.match(/,(.+)$/);
+                    if (titleMatch) {
+                        const title = titleMatch[1].trim();
+                        if (title && title !== 'Unknown' && title.length > 0) {
+                            return { title: title };
+                        }
+                    }
+                }
+            }
+            // Some playlists have #EXT-X-STREAM-INF with metadata
+            if (line.startsWith('#EXT-X-STREAM-INF:')) {
+                const nameMatch = line.match(/NAME="([^"]+)"/i);
+                if (nameMatch) {
+                    return { title: nameMatch[1] };
+                }
+            }
+        }
+        
+        return null;
+    } catch (error) {
+        console.debug('M3U8 parsing failed:', error.message);
+        return null;
+    }
+}
+
+// Extract Shoutcast/Icecast metadata from stream (works for MP3 streams too)
+function extractStreamMetadata(streamUrl) {
+    return new Promise(async (resolve, reject) => {
+        try {
+            // Check if it's an M3U8 playlist
+            if (streamUrl.includes('.m3u8') || streamUrl.includes('m3u8')) {
+                const m3u8Metadata = await parseM3U8Metadata(streamUrl);
+                if (m3u8Metadata) {
+                    return resolve(m3u8Metadata);
+                }
+                // If M3U8 parsing fails, try the actual stream URL (might be in playlist)
+                // For now, return null - M3U8 live streams rarely have metadata
+                return resolve(null);
+            }
+            
+            const url = new URL(streamUrl);
+            const httpModule = url.protocol === 'https:' ? https : http;
+            
+            const options = {
+                hostname: url.hostname,
+                port: url.port || (url.protocol === 'https:' ? 443 : 80),
+                path: url.pathname + (url.search || ''),
+                method: 'GET',
+                headers: {
+                    'Icy-MetaData': '1',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept': '*/*'
+                },
+                timeout: 10000 // 10 second timeout
+            };
+
+            const req = httpModule.request(options, (res) => {
+                let metadata = null;
+                
+                // Check for metadata in headers (some servers send it directly)
+                if (res.headers['icy-name']) {
+                    metadata = {
+                        stationName: res.headers['icy-name'],
+                        genre: res.headers['icy-genre'],
+                        bitrate: res.headers['icy-br'],
+                        url: res.headers['icy-url']
+                    };
+                }
+                
+                // Check for StreamTitle in headers
+                if (res.headers['streamtitle']) {
+                    metadata = metadata || {};
+                    metadata.title = res.headers['streamtitle'];
+                }
+                
+                // Get metadata interval (how often metadata is embedded in stream)
+                const metaInt = parseInt(res.headers['icy-metaint'] || '0', 10);
+                
+                if (metaInt > 0) {
+                    // Read metadata from stream
+                    let audioData = Buffer.alloc(0);
+                    let metadataRead = false;
+                    
+                    res.on('data', (chunk) => {
+                        if (!metadataRead && audioData.length < metaInt) {
+                            audioData = Buffer.concat([audioData, chunk]);
+                            
+                            if (audioData.length >= metaInt) {
+                                // Extract metadata
+                                const audioChunk = audioData.slice(0, metaInt);
+                                const metadataChunk = audioData.slice(metaInt);
+                                
+                                if (metadataChunk.length > 0) {
+                                    // First byte is metadata length (in 16-byte blocks)
+                                    const metadataLength = metadataChunk[0] * 16;
+                                    
+                                    if (metadataLength > 0 && metadataChunk.length >= metadataLength + 1) {
+                                        const metadataString = metadataChunk.slice(1, metadataLength + 1).toString('utf8');
+                                        
+                                        // Parse metadata string (format: StreamTitle='Artist - Song';)
+                                        const titleMatch = metadataString.match(/StreamTitle=['"]([^'"]+)['"]/i);
+                                        if (titleMatch) {
+                                            metadata = metadata || {};
+                                            metadata.title = titleMatch[1];
+                                        }
+                                        
+                                        // Parse other metadata
+                                        const urlMatch = metadataString.match(/StreamUrl=['"]([^'"]+)['"]/i);
+                                        if (urlMatch) {
+                                            metadata = metadata || {};
+                                            metadata.url = urlMatch[1];
+                                        }
+                                    }
+                                }
+                                
+                                metadataRead = true;
+                                req.destroy(); // Close connection after reading metadata
+                                resolve(metadata);
+                            }
+                        }
+                    });
+                    
+                    res.on('end', () => {
+                        if (!metadataRead) {
+                            resolve(metadata);
+                        }
+                    });
+                    
+                    res.on('error', (err) => {
+                        reject(err);
+                    });
+                } else {
+                    // No metadata interval, return what we got from headers
+                    req.destroy();
+                    resolve(metadata);
+                }
+            });
+            
+            req.on('error', (err) => {
+                reject(err);
+            });
+            
+            req.on('timeout', () => {
+                req.destroy();
+                reject(new Error('Metadata request timeout'));
+            });
+            
+            req.end();
+        } catch (error) {
+            reject(error);
+        }
+    });
+}
+
+// Parse M3U8 playlist for metadata
+async function parseM3U8Metadata(streamUrl) {
+    try {
+        // Create AbortController for timeout (AbortSignal.timeout may not be available in Node.js)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        
+        const response = await fetch(streamUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            },
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            return null;
+        }
+        
+        const content = await response.text();
+        const lines = content.split('\n');
+        
+        // Look for EXTINF lines with metadata
+        // Format: #EXTINF:-1,Artist - Song Title
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (line.startsWith('#EXTINF:')) {
+                const match = line.match(/#EXTINF:(-?\d+)(?:\s+(.+))?/);
+                if (match && match[2]) {
+                    const attrs = match[2];
+                    // Extract title (after comma)
+                    const titleMatch = attrs.match(/,(.+)$/);
+                    if (titleMatch) {
+                        const title = titleMatch[1].trim();
+                        if (title && title !== 'Unknown' && title.length > 0) {
+                            return { title: title };
+                        }
+                    }
+                }
+            }
+            // Some playlists have #EXT-X-STREAM-INF with metadata
+            if (line.startsWith('#EXT-X-STREAM-INF:')) {
+                const nameMatch = line.match(/NAME="([^"]+)"/i);
+                if (nameMatch) {
+                    return { title: nameMatch[1] };
+                }
+            }
+        }
+        
+        return null;
+    } catch (error) {
+        console.debug('M3U8 parsing failed:', error.message);
+        return null;
+    }
+}
+
+// Endpoint to get stream metadata
+app.get('/api/radio/metadata', async (req, res) => {
+    const streamUrl = req.query.url;
+    
+    if (!streamUrl) {
+        return res.status(400).json({ error: 'Stream URL is required' });
+    }
+    
+    try {
+        // For M3U8 streams, try to get the actual stream URL from playlist
+        let actualStreamUrl = streamUrl;
+        if (streamUrl.includes('.m3u8') || streamUrl.includes('m3u8')) {
+            // Try to extract first stream URL from M3U8 playlist
+            try {
+                // Create AbortController for timeout
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
+                
+                const response = await fetch(streamUrl, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    },
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                if (response.ok) {
+                    const content = await response.text();
+                    const lines = content.split('\n');
+                    // Find first non-comment, non-empty line (usually the stream URL)
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (trimmed && !trimmed.startsWith('#')) {
+                            // If it's a relative URL, make it absolute
+                            if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+                                actualStreamUrl = trimmed;
+                            } else {
+                                // Relative URL - construct absolute URL
+                                const baseUrl = new URL(streamUrl);
+                                actualStreamUrl = new URL(trimmed, baseUrl).href;
+                            }
+                            break;
+                        }
+                    }
+                }
+            } catch (e) {
+                // If M3U8 parsing fails, use original URL
+                console.debug('Could not parse M3U8 for stream URL:', e.message);
+            }
+        }
+        
+        const metadata = await extractStreamMetadata(actualStreamUrl);
+        
+        if (metadata && metadata.title) {
+            // Parse artist and song from title (format: "Artist - Song" or "Song")
+            const titleParts = metadata.title.split(' - ');
+            const artist = titleParts.length > 1 ? titleParts[0].trim() : null;
+            const song = titleParts.length > 1 ? titleParts.slice(1).join(' - ').trim() : titleParts[0].trim();
+            
+            res.json({
+                success: true,
+                title: metadata.title,
+                artist: artist,
+                song: song,
+                stationName: metadata.stationName,
+                genre: metadata.genre,
+                bitrate: metadata.bitrate
+            });
+        } else {
+            res.json({
+                success: false,
+                message: 'No metadata available for this stream',
+                streamType: streamUrl.includes('.m3u8') ? 'M3U8' : streamUrl.includes('.mp3') ? 'MP3' : 'Unknown'
+            });
+        }
+    } catch (error) {
+        console.error('Error extracting stream metadata:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message || 'Failed to extract metadata'
+        });
     }
 });
 
